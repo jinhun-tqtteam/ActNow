@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ActNow Extension Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ActNow Extension Test Page</h1>
+
+        <div class="test-section">
+            <h2>📋 Test Instructions</h2>
+            <ol>
+                <li>Install the ActNow Chrome extension in developer mode</li>
+                <li>Navigate to this page</li>
+                <li>Look for the floating chat button in the bottom-right corner</li>
+                <li>Try clicking on the chat button - it should open the chat interface</li>
+                <li>Test the minimize/close functionality</li>
+                <li>Test the settings button</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>🔍 What to Check</h2>
+            <ul>
+                <li>✓ Chat button is visible in bottom-right corner</li>
+                <li>✓ Button is clickable (cursor changes to pointer)</li>
+                <li>✓ Chat interface opens when button is clicked</li>
+                <li>✓ Console shows "Chat button clicked!" message</li>
+                <li>✓ No JavaScript errors in console</li>
+                <li>✓ All buttons and interactions work properly</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Test Results</h2>
+            <div id="test-status" class="status info">
+                Click the chat button to test the functionality...
+            </div>
+            <div style="margin-top: 10px;">
+                <button onclick="resetExtension()" style="background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 3px; cursor: pointer;">Reset Extension</button>
+                <small style="margin-left: 10px; color: #666;">If buttons don't work, reload the extension from chrome://extensions/</small>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🐛 Troubleshooting</h2>
+            <p>If the button is not clickable:</p>
+            <ul>
+                <li>Check browser console (F12) for JavaScript errors</li>
+                <li>Ensure the extension is properly loaded</li>
+                <li>Try refreshing the page</li>
+                <li>Check if other elements are blocking the button</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Reset function
+        function resetExtension() {
+            // Remove the widget if it exists
+            const widget = document.getElementById('actnow-chat-widget');
+            if (widget) {
+                widget.remove();
+                console.log('Widget removed from DOM');
+            }
+
+            // Reset the extension flag
+            delete window.ActNowAIExtension;
+
+            // Reload the page to reinitialize
+            setTimeout(() => {
+                window.location.reload();
+            }, 100);
+        }
+
+        // Listen for console messages from the extension
+        const originalLog = console.log;
+        const originalError = console.error;
+
+        const statusDiv = document.getElementById('test-status');
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+
+            if (args[0] === 'Chat button clicked!') {
+                statusDiv.className = 'status success';
+                statusDiv.innerHTML = '✅ SUCCESS: Chat button is working! The click event was detected.';
+            }
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+
+            if (args[0] && args[0].includes && args[0].includes('Widget container not found')) {
+                statusDiv.className = 'status info';
+                statusDiv.innerHTML = '⚠️ Extension is loading... Please wait a moment and try again.';
+            }
+        };
+
+        // Check if extension is loaded
+        setTimeout(() => {
+            checkExtensionStatus();
+        }, 1000);
+
+        // Check status function
+        function checkExtensionStatus() {
+            if (document.getElementById('actnow-chat-widget')) {
+                statusDiv.className = 'status success';
+                statusDiv.innerHTML = `✅ Extension loaded successfully! Try clicking the chat button.
+                <div style="margin-top: 10px;">
+                    <button onclick="window.checkActNowWidget()" style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">Debug</button>
+                    <button onclick="window.forceOpenActNow()" style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">Force Open</button>
+                    <button onclick="window.forceCloseActNow()" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">Force Close</button>
+                    <button onclick="window.manualClickChat()" style="background: #ffc107; color: black; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">Manual Click</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button onclick="window.debugState()" style="background: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">🔍 Debug State</button>
+                    <button onclick="window.reloadState()" style="background: #6610f2; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">🔄 Reload State</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button onclick="window.testNewFeatures()" style="background: #e83e8c; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">🧪 Test Features</button>
+                    <button onclick="window.testStreaming()" style="background: #fd7e14; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 5px;">📡 Test Streaming</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button onclick="window.debugMessageFormat()" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">🔧 Fix Messages</button>
+                </div>`;
+            } else {
+                statusDiv.className = 'status info';
+                statusDiv.innerHTML = '⚠️ Extension not detected. Make sure the extension is installed and enabled. <button onclick="checkExtensionStatus()" style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Check Again</button>';
+            }
+        }
+    </script>
+</body>
+</html>
