@@ -445,25 +445,6 @@ async function loadModels() {
     }
 }
 
-// Check API key status
-async function checkApiKeyStatus() {
-    const apiKey = document.getElementById('api-key').value.trim();
-    const statusDot = document.getElementById('api-status-dot');
-    const statusText = document.getElementById('api-status-text');
-
-    if (!apiKey) {
-        updateApiStatus('Not configured', 'invalid');
-        return;
-    }
-
-    // Simple validation - check if it looks like an OpenRouter key
-    if (apiKey.startsWith('sk-or-v1-')) {
-        updateApiStatus('Configured', 'valid');
-    } else {
-        updateApiStatus('Invalid format', 'invalid');
-    }
-}
-
 // Update API status display
 function updateApiStatus(text, status) {
     const statusDot = document.getElementById('api-status-dot');
