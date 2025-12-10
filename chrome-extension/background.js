@@ -29,6 +29,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ enabled: extensionEnabled });
     } else if (request.action === 'getExtensionStatus') {
         sendResponse({ enabled: extensionEnabled });
+    } else if (request.action === 'openOptionsPage') {
+        chrome.runtime.openOptionsPage();
     }
     // Return true to indicate we might send a response asynchronously (though not used here)
     return true;

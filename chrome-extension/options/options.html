@@ -477,6 +477,62 @@
                 justify-content: center;
             }
         }
+
+        /* Chips Management */
+        .chip-item {
+            background: var(--glass-white);
+            border: 1px solid var(--neutral-300);
+            border-radius: var(--radius-full);
+            padding: 8px 12px 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .chip-item:hover {
+            border-color: var(--neutral-400);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .chip-delete {
+            background: rgba(0,0,0,0.05);
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1;
+            padding: 0;
+        }
+        .chip-delete:hover {
+            background: #fee2e2;
+            color: #ef4444;
+        }
+        .chip-edit {
+            background: rgba(0,0,0,0.05);
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 12px;
+            padding: 0;
+            margin-right: 2px;
+        }
+        .chip-edit:hover {
+            background: #e0f2fe;
+            color: #0ea5e9;
+        }
     </style>
 </head>
 <body>
@@ -561,6 +617,30 @@
                 </div>
                 <div class="help-text">
                     0 = Precise & Focused | 1 = Creative & Varied
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">
+                <span>🏷️</span> Custom Chips
+            </h2>
+            <div class="help-text" style="margin-bottom: 16px;">
+                Create custom shortcuts that appear above the chat input. Clicking a chip will prepend its prompt to your message.
+            </div>
+            
+            <div id="chips-list-container" style="margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 10px;">
+                <!-- Chips will be loaded here -->
+                <div style="color: var(--text-secondary); font-style: italic;">No custom chips yet. Add one below!</div>
+            </div>
+
+            <div class="form-group" style="background: rgba(0,0,0,0.03); padding: 20px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <label id="chip-form-title">Add New Chip</label>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <input type="text" id="new-chip-label" placeholder="Label (e.g. 'Summarize')" style="flex: 1; min-width: 120px;">
+                    <input type="text" id="new-chip-prompt" placeholder="Prompt (e.g. 'Summarize this text: ')" style="flex: 2; min-width: 200px;">
+                    <button class="btn btn-primary" id="add-chip-btn">Add Chip</button>
+                    <button class="btn btn-secondary" id="cancel-chip-btn" style="display: none;">Cancel</button>
                 </div>
             </div>
         </div>

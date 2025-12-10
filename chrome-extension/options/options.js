@@ -6,6 +6,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load statistics
     await loadStatistics();
+    
+    // Load custom chips
+    await loadChips();
 
     // Set up event listeners
     setupEventListeners();
@@ -60,6 +63,185 @@ async function loadSettings() {
         console.error('Failed to load settings:', error);
         showMessage('Failed to load settings', 'error');
     }
+}
+
+// Chips Management
+let editingChipId = null;
+
+async function loadChips() {
+    try {
+        const result = await chrome.storage.sync.get('customChips');
+        let chips = result.customChips;
+        
+        // Initialize with defaults if empty
+        if (!chips || !Array.isArray(chips)) {
+            chips = [
+                { id: 'def_1', label: 'Summarize', prompt: 'Summarize this text: ' },
+                { id: 'def_2', label: 'Explain', prompt: 'Explain this clearly: ' },
+                { id: 'def_3', label: 'Fix Grammar', prompt: 'Fix grammar and improve flow: ' }
+            ];
+            await chrome.storage.sync.set({ customChips: chips });
+        }
+        
+        renderChips(chips);
+    } catch (error) {
+        console.error('Failed to load chips:', error);
+    }
+}
+
+function renderChips(chips) {
+    const container = document.getElementById('chips-list-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (chips.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-secondary); font-style: italic;">No custom chips yet. Add one below!</div>';
+        return;
+    }
+    
+    chips.forEach(chip => {
+        const chipEl = document.createElement('div');
+        chipEl.className = 'chip-item';
+        
+        // Visual indicator for editing
+        if (editingChipId === chip.id) {
+            chipEl.style.borderColor = 'var(--neutral-500)';
+            chipEl.style.backgroundColor = 'var(--neutral-100)';
+        }
+
+        chipEl.innerHTML = `
+            <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(chip.label)}</span>
+            <div style="display:flex;">
+                <button class="chip-edit" title="Edit chip">✎</button>
+                <button class="chip-delete" title="Delete chip">×</button>
+            </div>
+        `;
+        
+        chipEl.querySelector('.chip-edit').addEventListener('click', () => startEditChip(chip));
+        chipEl.querySelector('.chip-delete').addEventListener('click', () => deleteChip(chip.id));
+        container.appendChild(chipEl);
+    });
+}
+
+async function addChip() {
+    const labelInput = document.getElementById('new-chip-label');
+    const promptInput = document.getElementById('new-chip-prompt');
+    const btn = document.getElementById('add-chip-btn');
+    
+    const label = labelInput.value.trim();
+    const prompt = promptInput.value.trim();
+    
+    if (!label || !prompt) {
+        alert('Please enter both label and prompt');
+        return;
+    }
+    
+    btn.disabled = true;
+    
+    try {
+        const result = await chrome.storage.sync.get('customChips');
+        let chips = result.customChips || [];
+        
+        if (editingChipId) {
+            // Update existing
+            const index = chips.findIndex(c => c.id === editingChipId);
+            if (index !== -1) {
+                chips[index].label = label;
+                chips[index].prompt = prompt;
+                showMessage('Chip updated successfully', 'success');
+            }
+        } else {
+            // Add new
+            const newChip = {
+                id: 'chip_' + Date.now(),
+                label: label,
+                prompt: prompt
+            };
+            chips.push(newChip);
+            showMessage('Chip added successfully', 'success');
+        }
+        
+        await chrome.storage.sync.set({ customChips: chips });
+        
+        resetChipForm();
+        renderChips(chips);
+        
+        // Notify background
+        chrome.runtime.sendMessage({ action: 'chipsUpdated' });
+        
+    } catch (error) {
+        console.error('Failed to save chip:', error);
+        showMessage('Failed to save chip', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function startEditChip(chip) {
+    editingChipId = chip.id;
+    
+    document.getElementById('new-chip-label').value = chip.label;
+    document.getElementById('new-chip-prompt').value = chip.prompt;
+    
+    document.getElementById('add-chip-btn').textContent = 'Update Chip';
+    document.getElementById('cancel-chip-btn').style.display = 'inline-block';
+    document.getElementById('chip-form-title').textContent = 'Edit Chip';
+    
+    // Highlight selected chip
+    // Re-render to show selection state
+    chrome.storage.sync.get('customChips').then(result => {
+        renderChips(result.customChips || []);
+    });
+}
+
+function cancelEditChip() {
+    resetChipForm();
+    // Re-render to remove highlight
+    chrome.storage.sync.get('customChips').then(result => {
+        renderChips(result.customChips || []);
+    });
+}
+
+function resetChipForm() {
+    editingChipId = null;
+    document.getElementById('new-chip-label').value = '';
+    document.getElementById('new-chip-prompt').value = '';
+    
+    document.getElementById('add-chip-btn').textContent = 'Add Chip';
+    document.getElementById('cancel-chip-btn').style.display = 'none';
+    document.getElementById('chip-form-title').textContent = 'Add New Chip';
+}
+
+async function deleteChip(id) {
+    if (!confirm('Delete this chip?')) return;
+    
+    try {
+        const result = await chrome.storage.sync.get('customChips');
+        let chips = result.customChips || [];
+        
+        chips = chips.filter(c => c.id !== id);
+        
+        // If we deleted the chip currently being edited, reset form
+        if (editingChipId === id) {
+            resetChipForm();
+        }
+        
+        await chrome.storage.sync.set({ customChips: chips });
+        renderChips(chips);
+        
+        // Notify background
+        chrome.runtime.sendMessage({ action: 'chipsUpdated' });
+        
+    } catch (error) {
+        console.error('Failed to delete chip:', error);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Save settings
@@ -320,6 +502,10 @@ function setupEventListeners() {
     // Export/Import
     document.getElementById('export-data').addEventListener('click', exportData);
     document.getElementById('import-data').addEventListener('click', importData);
+
+    // Chips
+    document.getElementById('add-chip-btn').addEventListener('click', addChip);
+    document.getElementById('cancel-chip-btn').addEventListener('click', cancelEditChip);
 }
 
 // API and Model Functions

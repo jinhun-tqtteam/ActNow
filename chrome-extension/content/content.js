@@ -36,11 +36,19 @@
                 isStreaming: false,
                 isResizing: false,
                 chatSize: { width: 380, height: 600 },
-                resizeStart: { x: 0, y: 0, width: 0, height: 0 }
+                resizeStart: { x: 0, y: 0, width: 0, height: 0 },
+                // Conversation Management
+                conversationList: [],
+                isSidebarOpen: false,
+                // Selected Content
+                selectedText: null,
+                // Custom Chips
+                customChips: []
             };
 
             this.boundResizeMove = this.handleResizeMove.bind(this);
             this.boundResizeEnd = this.handleResizeEnd.bind(this);
+            this.boundHandleSelection = this.handleSelection.bind(this);
         }
 
         async init() {
@@ -57,6 +65,11 @@
             // Render Widget AFTER state is loaded
             this.renderWidget();
             console.log('✅ Widget rendered');
+            
+            // Initial Render of dynamic content (since initializeState ran before DOM was ready)
+            this.renderSidebar();
+            this.renderMessages();
+            this.renderChips();
 
             // Setup Runtime Listeners
             this.setupRuntimeListeners();
@@ -158,19 +171,35 @@
                 <div id="actnow-chat-widget">
                     <!-- Floating Chat Button - Glassmorphism Circle -->
                     <div id="actnow-chat-button" class="actnow-chat-button" role="button" aria-expanded="false" aria-controls="actnow-chat-container" tabindex="0">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M21 11.5C21.0034 12.8199 20.6951 14.1219 20.1 15.3C19.3944 16.7118 18.3098 17.8992 16.9674 18.7293C15.6251 19.5594 14.0782 19.9994 12.5 20C11.1801 20.0035 9.87812 19.6951 8.7 19.1L3 21L4.9 15.3C4.30493 14.1219 3.99656 12.8199 4 11.5C4.00061 9.92179 4.44061 8.37488 5.27072 7.03258C6.10083 5.69028 7.28825 4.6056 8.7 3.90003C9.87812 3.30496 11.1801 2.99659 12.5 3.00003H13C15.0843 3.11502 17.053 3.99479 18.5291 5.47089C20.0052 6.94699 20.885 8.91568 21 11V11.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            <circle cx="8.5" cy="11.5" r="1" fill="currentColor"/>
-                            <circle cx="12.5" cy="11.5" r="1" fill="currentColor"/>
-                            <circle cx="16.5" cy="11.5" r="1" fill="currentColor"/>
-                        </svg>
+                        <div style="font-size: 28px;">⚡</div>
                     </div>
 
                     <!-- Chat Container - Soft Glass Card -->
                     <div id="actnow-chat-container" class="actnow-chat-container actnow-chat-closed" aria-expanded="false">
+                        
+                        <!-- Sidebar -->
+                        <div id="actnow-sidebar" class="actnow-sidebar">
+                            <div class="actnow-sidebar-header">
+                                <span class="actnow-sidebar-title">History</span>
+                            </div>
+                            <button id="actnow-new-chat-btn" class="actnow-new-chat-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 5V19M5 12H19"/>
+                                </svg>
+                                New Chat
+                            </button>
+                            <div id="actnow-conversation-list" class="actnow-conversation-list"></div>
+                        </div>
+                        <div id="actnow-sidebar-overlay" class="actnow-sidebar-overlay"></div>
+
                         <!-- Header -->
                         <div id="actnow-chat-header" class="actnow-chat-header">
                             <div class="actnow-header-left">
+                                <button id="actnow-sidebar-toggle" class="actnow-sidebar-toggle" title="Conversation History">
+                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </button>
                                 <div class="actnow-bot-avatar">
                                     <div class="actnow-avatar-icon">⚡</div>
                                     <div class="actnow-status-dot"></div>
@@ -181,6 +210,12 @@
                                 </div>
                             </div>
                             <div class="actnow-header-actions">
+                                <button id="actnow-settings-btn" class="actnow-icon-btn-modern" title="Settings">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M19.4 15L21 12L19.4 9M12 3V5M12 19V21M4.6 15L3 12L4.6 9M17.65 17.65L19.06 19.06M4.94 4.94L6.35 6.35M6.35 17.65L4.94 19.06M19.06 4.94L17.65 6.35" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </button>
                                 <button id="actnow-minimize-btn" class="actnow-icon-btn-modern" title="Close chat">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -193,10 +228,33 @@
                         <div id="actnow-messages" class="actnow-messages">
                             <!-- Messages rendered dynamically -->
                         </div>
+                        
+                        <!-- Queue Area -->
+                        <div id="actnow-queue-container"></div>
 
                         <!-- Input Area - Glassmorphism -->
                         <div class="actnow-input-container">
                             <div class="actnow-input-area">
+                                <!-- Chips Bar -->
+                                <div id="actnow-chips-bar" class="actnow-chips-bar"></div>
+
+                                <!-- Context Preview (Selected Text) -->
+                                <div id="actnow-context-preview" class="actnow-context-preview">
+                                    <div class="actnow-context-content">
+                                        <div class="actnow-context-icon">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </div>
+                                        <span class="actnow-context-text" id="actnow-context-text"></span>
+                                    </div>
+                                    <button class="actnow-context-close" id="actnow-context-close" title="Clear selection">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M18 6L6 18M6 6L18 18"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
                                 <div class="actnow-input-wrapper-modern">
                                     <textarea id="actnow-message-input" class="actnow-message-input-modern" placeholder="Ask me anything..." rows="1"></textarea>
                                     <button id="actnow-send-btn" class="actnow-send-btn-modern" disabled title="Send">
@@ -267,6 +325,7 @@
             // Chat Toggle
             const chatButton = get('actnow-chat-button');
             const minimizeBtn = get('actnow-minimize-btn');
+            const settingsBtn = get('actnow-settings-btn');
             
             if (chatButton) chatButton.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -286,6 +345,21 @@
                 e.stopPropagation();
                 this.toggleChat(false);
             });
+            
+            if (settingsBtn) settingsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                chrome.runtime.sendMessage({ action: 'openOptionsPage' });
+            });
+
+            // Sidebar Events
+            const sidebarToggle = get('actnow-sidebar-toggle');
+            const sidebarOverlay = get('actnow-sidebar-overlay');
+            const newChatBtn = get('actnow-new-chat-btn');
+
+            if (sidebarToggle) sidebarToggle.addEventListener('click', () => this.toggleSidebar());
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => this.toggleSidebar(false));
+            if (newChatBtn) newChatBtn.addEventListener('click', () => this.createNewConversation());
 
             // Model Selector - Searchable Dropdown
             this.setupModelDropdown();
@@ -343,22 +417,111 @@
                     const chip = e.target.closest('.actnow-chip');
                     if (chip) {
                         const msg = chip.getAttribute('data-message');
-                        const input = get('actnow-message-input');
-                        if (input && msg) {
-                            input.value = msg;
-                            input.dispatchEvent(new Event('input'));
-                            input.focus();
-                            setTimeout(() => this.sendMessage(), 100);
+                        // Legacy support for welcome chips
+                        if (msg) {
+                             const input = get('actnow-message-input');
+                            if (input) {
+                                input.value = msg;
+                                input.dispatchEvent(new Event('input'));
+                                input.focus();
+                                setTimeout(() => this.sendMessage(), 100);
+                            }
                         }
                     }
                 });
+            }
+            
+            // New Chips Bar Listener
+            const chipsBar = get('actnow-chips-bar');
+            if (chipsBar) {
+                chipsBar.addEventListener('click', (e) => {
+                    const chip = e.target.closest('.actnow-chip');
+                    if (chip) {
+                        const prompt = chip.getAttribute('data-prompt');
+                        if (prompt) {
+                            const input = get('actnow-message-input');
+                            if (input) {
+                                const current = input.value;
+                                if (current.trim()) {
+                                    input.value = prompt + ' ' + current;
+                                } else {
+                                    input.value = prompt;
+                                }
+                                input.dispatchEvent(new Event('input'));
+                                input.focus();
+                                // Send immediately as requested
+                                setTimeout(() => this.sendMessage(), 100);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Selection Listener (Global)
+            const contextClose = get('actnow-context-close');
+            if (contextClose) {
+                contextClose.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.clearSelection();
+                });
+            }
+
+            // Listen for selection changes on the main document
+            document.addEventListener('mouseup', this.boundHandleSelection);
+            document.addEventListener('keyup', (e) => {
+                 if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Meta') {
+                     // Check selection when modifier keys are released
+                     this.handleSelection();
+                 }
+            });
+        }
+
+        handleSelection() {
+            // Don't capture selection if interaction is inside the widget
+            if (this.hostElement && this.hostElement.contains(document.activeElement)) {
+                return;
+            }
+            // Or if the mouseup target was inside our host
+            if (window.event && this.hostElement && this.hostElement.contains(window.event.target)) {
+                 return;
+            }
+
+            const selection = window.getSelection().toString().trim();
+            if (selection && selection.length > 0) {
+                console.log('📝 Text selected:', selection.substring(0, 20) + '...');
+                this.state.selectedText = selection;
+                this.updateContextUI();
+            }
+        }
+
+        clearSelection() {
+            this.state.selectedText = null;
+            this.updateContextUI();
+        }
+
+        updateContextUI() {
+            const preview = this.shadowRoot.getElementById('actnow-context-preview');
+            const textEl = this.shadowRoot.getElementById('actnow-context-text');
+            
+            if (!preview || !textEl) return;
+
+            if (this.state.selectedText) {
+                // Format: "Word1 Word2..."
+                const words = this.state.selectedText.split(/\s+/);
+                const display = words.slice(0, 2).join(' ') + (words.length > 2 ? '...' : '');
+                
+                textEl.textContent = `Selected: "${display}"`;
+                textEl.title = this.state.selectedText; // Tooltip shows full text
+                preview.classList.add('visible');
+            } else {
+                preview.classList.remove('visible');
             }
         }
 
         async initializeState() {
             console.log('📦 Loading settings from storage...');
             const settings = await chrome.storage.sync.get([
-                'apiKey', 'model', 'theme', 'maxTokens', 'temperature', 'conversationId', 'chatSize'
+                'apiKey', 'model', 'theme', 'maxTokens', 'temperature', 'conversationId', 'chatSize', 'customChips'
             ]);
 
             console.log('📦 Settings loaded:', {
@@ -372,7 +535,23 @@
             this.state.theme = settings.theme || 'light';
             this.state.maxTokens = settings.maxTokens || 1000;
             this.state.temperature = settings.temperature || 0.7;
-            this.state.conversationId = settings.conversationId || this.generateId('conv');
+            this.state.customChips = settings.customChips || [];
+            
+            // ISOLATION LOGIC:
+            // 1. Try to get ID from sessionStorage (this specific tab's history)
+            // 2. If not found, generate a NEW ID
+            // 3. We do NOT sync this ID to chrome.storage.sync anymore to prevent hijacking other tabs
+            
+            let sessionConvId = sessionStorage.getItem('actnow_active_conversation_id');
+            
+            if (sessionConvId) {
+                console.log('🔄 Restored conversation ID from session:', sessionConvId);
+                this.state.conversationId = sessionConvId;
+            } else {
+                this.state.conversationId = this.generateId('conv');
+                sessionStorage.setItem('actnow_active_conversation_id', this.state.conversationId);
+                console.log('🆕 Generated new session-based conversation ID:', this.state.conversationId);
+            }
 
             console.log('✅ State initialized:', {
                 hasApiKey: !!this.state.apiKey,
@@ -391,9 +570,55 @@
             this.applyChatSize();
 
             this.applyTheme(this.state.theme);
+            
+            // Load Conversation List
+            await this.loadConversationList();
+            
+            // If we are starting a NEW conversation (not in list), let's pre-register it in the list
+            // with the current URL so it appears immediately
+            const exists = this.state.conversationList.find(c => c.id === this.state.conversationId);
+            if (!exists) {
+                 await this.saveConversationList([{
+                     id: this.state.conversationId,
+                     title: 'New Conversation',
+                     timestamp: Date.now(),
+                     url: window.location.hostname
+                 }, ...this.state.conversationList]); // Keep existing ones
+            }
+
             await this.loadConversation();
             this.updateSendButtonState();
+            this.renderChips();
             console.log('✅ State initialization complete');
+        }
+
+        renderChips() {
+            const container = this.shadowRoot.getElementById('actnow-chips-bar');
+            if (!container) return;
+            
+            const chips = this.state.customChips;
+            if (!chips || chips.length === 0) {
+                // If no custom chips, show defaults or hide
+                 // For now, let's use the defaults if empty, similar to options page
+                 const defaults = [
+                    { label: 'Summarize', prompt: 'Summarize this text: ' },
+                    { label: 'Explain', prompt: 'Explain this clearly: ' },
+                    { label: 'Fix Grammar', prompt: 'Fix grammar and improve flow: ' }
+                ];
+                container.innerHTML = defaults.map(chip => 
+                    `<button class="actnow-chip" data-prompt="${this.escapeHtml(chip.prompt)}">${this.escapeHtml(chip.label)}</button>`
+                ).join('');
+            } else {
+                container.innerHTML = chips.map(chip => 
+                    `<button class="actnow-chip" data-prompt="${this.escapeHtml(chip.prompt)}">${this.escapeHtml(chip.label)}</button>`
+                ).join('');
+            }
+        }
+        
+        escapeHtml(text) {
+             const div = document.createElement('div');
+             div.textContent = text;
+             return div.innerHTML;
         }
 
         setupRuntimeListeners() {
@@ -419,7 +644,33 @@
                     }
                     if (changes.maxTokens) this.state.maxTokens = changes.maxTokens.newValue;
                     if (changes.temperature) this.state.temperature = changes.temperature.newValue;
+                    if (changes.customChips) {
+                        this.state.customChips = changes.customChips.newValue || [];
+                        this.renderChips();
+                    }
+                    
+                    // REMOVED: Sync conversation switch logic
+                    // We want tabs to be independent unless user manually switches via sidebar
+
                     this.updateSendButtonState();
+                } else if (area === 'local') {
+                    // Sync conversation list (shared history)
+                    if (changes.conversation_list) {
+                        console.log('🔄 Sync: Conversation list updated');
+                        this.state.conversationList = changes.conversation_list.newValue || [];
+                        this.renderSidebar();
+                    }
+
+                    // Sync messages for current conversation
+                    const currentConvKey = 'conversation_' + this.state.conversationId;
+                    if (changes[currentConvKey]) {
+                        console.log('🔄 Sync: Messages updated for current conversation');
+                        // Only update if not currently streaming to avoid conflict
+                        if (!this.state.isStreaming) {
+                             this.state.messages = changes[currentConvKey].newValue || [];
+                             this.renderMessages();
+                        }
+                    }
                 }
             });
         }
@@ -499,12 +750,23 @@
                 console.log('⏳ Already processing, adding to queue');
                 this.state.messageQueue.push(content);
                 input.value = '';
+                this.renderMessages(); // Immediately render queue UI
                 return;
             }
 
             console.log('✅ All checks passed, processing message...');
+            
+            // Build Final Message with Context
+            let finalContent = content;
+            if (this.state.selectedText) {
+                finalContent = `Context:\n"""\n${this.state.selectedText}\n"""\n\nQuestion: ${content}`;
+                
+                // Clear selection UI after sending
+                this.clearSelection();
+            }
+
             input.value = '';
-            await this.processMessage(content);
+            await this.processMessage(finalContent);
         }
 
         async processMessage(content) {
@@ -535,6 +797,14 @@
             this.state.isStreaming = true;
             console.log('✅ Assistant message placeholder created');
             this.renderMessages();
+
+            // Save immediately so user message persists even if reload happens during stream
+            try {
+                await this.saveConversation();
+            } catch (e) {
+                console.warn('⚠️ Context invalidated during initial save:', e);
+                return; // Stop processing if extension context is gone
+            }
 
             try {
                 // Use Background Port for API Call
@@ -700,7 +970,7 @@
                 return;
             }
 
-            container.innerHTML = this.state.messages.map(msg => {
+            const historyHTML = this.state.messages.map(msg => {
                 let contentHTML = '';
                 if (msg.role === 'assistant' && msg.id === this.state.streamingMessageId && !msg.content) {
                      // Inline loading indicator
@@ -734,7 +1004,61 @@
                 </div>
             `}).join('');
 
+            // Render Queue
+            const queueHTML = this.state.messageQueue.map((content) => {
+                return `
+                <div class="actnow-message actnow-message-user actnow-message-queued">
+                    <div class="actnow-message-content">
+                        ${this.formatMessage(content)}
+                        <div class="actnow-queue-status">
+                            <span class="actnow-queue-icon">⏳</span> Waiting in queue...
+                        </div>
+                    </div>
+                     <div class="actnow-message-footer-row">
+                        <div class="actnow-message-avatar" style="opacity:0.5">👤</div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+            
+            // Render Clear Queue Button (if queue exists)
+            let clearQueueHTML = '';
+            if (this.state.messageQueue.length > 0) {
+                 clearQueueHTML = `
+                    <div class="actnow-queue-actions">
+                        <button id="actnow-clear-queue-btn" class="actnow-btn-small">
+                            <span style="font-size: 14px;">⛔</span> Stop & Clear Queue (${this.state.messageQueue.length})
+                        </button>
+                    </div>
+                 `;
+            }
+
+            container.innerHTML = historyHTML;
+            
+            // Render Queue into separate container
+            const queueContainer = this.shadowRoot.getElementById('actnow-queue-container');
+            if (queueContainer) {
+                queueContainer.innerHTML = queueHTML + clearQueueHTML;
+                
+                // Attach Clear Queue Listener
+                const clearBtn = queueContainer.querySelector('#actnow-clear-queue-btn');
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', () => this.clearQueue());
+                }
+            }
+
             this.scrollToBottom();
+        }
+        
+        clearQueue() {
+            if (this.state.messageQueue.length === 0) return;
+            
+            if (confirm('Cancel all pending messages?')) {
+                console.log('🛑 Clearing message queue:', this.state.messageQueue.length);
+                this.state.messageQueue = [];
+                this.renderMessages();
+                this.updateSendButtonState();
+            }
         }
 
         getWelcomeHTML() {
@@ -765,15 +1089,190 @@
         }
 
         async saveConversation() {
-             await chrome.storage.local.set({
-                 ['conversation_' + this.state.conversationId]: this.state.messages
-             });
+             try {
+                await chrome.storage.local.set({
+                    ['conversation_' + this.state.conversationId]: this.state.messages
+                });
+             } catch (e) {
+                console.warn('⚠️ Failed to save conversation (likely context invalidated):', e);
+                return;
+             }
+
+             // Update title in list but DO NOT update timestamp or reorder
+             const index = this.state.conversationList.findIndex(c => c.id === this.state.conversationId);
+             if (index !== -1) {
+                 // Removed timestamp update to keep "Creation Time" sorting
+                 // this.state.conversationList[index].timestamp = Date.now();
+                 
+                 // Update title if it's "New Conversation" and we have messages
+                 if (this.state.conversationList[index].title === 'New Conversation' && this.state.messages.length > 0) {
+                     const firstUserMsg = this.state.messages.find(m => m.role === 'user');
+                     if (firstUserMsg) {
+                         const title = firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '');
+                         this.state.conversationList[index].title = title;
+                         await this.saveConversationList(this.state.conversationList);
+                     }
+                 }
+                 
+                 // Removed reordering logic (splice/unshift)
+             }
         }
 
         async loadConversation() {
             const data = await chrome.storage.local.get('conversation_' + this.state.conversationId);
             this.state.messages = data['conversation_' + this.state.conversationId] || [];
             this.renderMessages();
+            this.renderSidebar(); // Update sidebar active state
+        }
+
+        // Conversation Management
+        async loadConversationList() {
+            const data = await chrome.storage.local.get('conversation_list');
+            this.state.conversationList = data.conversation_list || [];
+            
+            // Sort by timestamp descending (Newest Created First)
+            this.state.conversationList.sort((a, b) => b.timestamp - a.timestamp);
+            
+            this.renderSidebar();
+        }
+
+        async saveConversationList(list) {
+            this.state.conversationList = list;
+            await chrome.storage.local.set({ conversation_list: list });
+            this.renderSidebar();
+        }
+
+        async createNewConversation() {
+            const newId = this.generateId('conv');
+            const newConv = {
+                id: newId,
+                title: 'New Conversation',
+                timestamp: Date.now(),
+                url: window.location.hostname
+            };
+
+            // Save current conversation first
+            await this.saveConversation();
+
+            // Switch state
+            this.state.conversationId = newId;
+            // Update session storage
+            sessionStorage.setItem('actnow_active_conversation_id', newId);
+            
+            this.state.messages = [];
+            
+            // Add to list
+            this.state.conversationList.unshift(newConv);
+            
+            // Save everything
+            await this.saveConversationList(this.state.conversationList);
+            // Don't sync global ID anymore
+            // await chrome.storage.sync.set({ conversationId: newId });
+            
+            // Render
+            this.renderMessages();
+            this.toggleSidebar(false); // Close sidebar on mobile/small screens or just for UX
+            this.updateSendButtonState();
+        }
+
+        async deleteConversation(id, e) {
+            if (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+
+            if (!confirm('Are you sure you want to delete this conversation?')) return;
+
+            // Remove from storage
+            await chrome.storage.local.remove('conversation_' + id);
+
+            // Remove from list
+            const newList = this.state.conversationList.filter(c => c.id !== id);
+            await this.saveConversationList(newList);
+
+            // If deleted current conversation, switch to another
+            if (id === this.state.conversationId) {
+                if (newList.length > 0) {
+                    await this.switchConversation(newList[0].id);
+                } else {
+                    // Create new if all deleted
+                    await this.createNewConversation();
+                }
+            }
+        }
+
+        async switchConversation(id) {
+            if (id === this.state.conversationId) {
+                this.toggleSidebar(false);
+                return;
+            }
+
+            // Save current
+            await this.saveConversation();
+
+            // Update ID
+            this.state.conversationId = id;
+            sessionStorage.setItem('actnow_active_conversation_id', id);
+            // Don't sync global ID anymore
+            // await chrome.storage.sync.set({ conversationId: id });
+
+            // Load new
+            await this.loadConversation();
+            
+            // Close sidebar
+            if (window.innerWidth < 600) {
+                this.toggleSidebar(false);
+            }
+        }
+
+        toggleSidebar(forceState = null) {
+            const sidebar = this.shadowRoot.getElementById('actnow-sidebar');
+            const overlay = this.shadowRoot.getElementById('actnow-sidebar-overlay');
+            if (!sidebar) return;
+
+            const newState = forceState !== null ? forceState : !this.state.isSidebarOpen;
+            this.state.isSidebarOpen = newState;
+
+            if (newState) {
+                sidebar.classList.add('open');
+                if (overlay) overlay.classList.add('visible');
+            } else {
+                sidebar.classList.remove('open');
+                if (overlay) overlay.classList.remove('visible');
+            }
+        }
+
+        renderSidebar() {
+            const listEl = this.shadowRoot.getElementById('actnow-conversation-list');
+            if (!listEl) return;
+
+            if (this.state.conversationList.length === 0) {
+                listEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-light)">No conversations</div>';
+                return;
+            }
+
+            listEl.innerHTML = this.state.conversationList.map(conv => `
+                <div class="actnow-conv-item ${conv.id === this.state.conversationId ? 'active' : ''}" data-id="${conv.id}">
+                    <div class="actnow-conv-info">
+                        <span class="actnow-conv-title">${this.escapeHtml(conv.title)}</span>
+                        <span class="actnow-conv-meta">${this.escapeHtml(conv.url || 'Unknown page')}</span>
+                    </div>
+                    <button class="actnow-conv-delete" title="Delete" data-id="${conv.id}">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6L18 18"/>
+                        </svg>
+                    </button>
+                </div>
+            `).join('');
+
+            // Attach events
+            listEl.querySelectorAll('.actnow-conv-item').forEach(item => {
+                item.addEventListener('click', () => this.switchConversation(item.getAttribute('data-id')));
+            });
+
+            listEl.querySelectorAll('.actnow-conv-delete').forEach(btn => {
+                btn.addEventListener('click', (e) => this.deleteConversation(btn.getAttribute('data-id'), e));
+            });
         }
         
         // Resize Logic
