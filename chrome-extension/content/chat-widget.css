@@ -654,44 +654,177 @@
     color: #fb7185;
 }
 
-/* Code Blocks */
+/* ============================================
+   MARKDOWN & SYNTAX HIGHLIGHTING (IMPROVED)
+   ============================================ */
+
+/* Code Blocks Container */
 .actnow-code-block {
     margin: 12px 0;
     border-radius: 8px;
-    background: #1e293b;
+    background: #1e293b; /* Dark Slate for code bg */
     overflow: hidden;
-    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-    font-size: 12px;
-    border: 1px solid rgba(0,0,0,0.1);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Menlo', monospace;
+    font-size: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+/* Header with Language and Copy Button */
 .actnow-code-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.05);
+    background: #0f172a; /* Darker header */
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     color: #94a3b8;
+}
+
+.actnow-code-lang {
     font-size: 11px;
+    font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #cbd5e1;
+}
+
+/* Copy Button */
+.actnow-copy-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.actnow-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+}
+
+.actnow-copy-btn svg {
+    opacity: 0.8;
+}
+
+/* Pre/Code Area */
+.actnow-code-block pre {
+    margin: 0;
+    padding: 0;
 }
 
 .actnow-code-block code {
     display: block;
-    padding: 12px;
+    padding: 16px;
     color: #e2e8f0;
     overflow-x: auto;
     white-space: pre;
+    line-height: 1.6;
 }
 
-/* Scrollbars for code blocks */
+/* Scrollbar for Code */
 .actnow-code-block code::-webkit-scrollbar {
-    height: 6px;
+    height: 8px;
+    background: #0f172a;
 }
+
 .actnow-code-block code::-webkit-scrollbar-thumb {
     background: #475569;
-    border-radius: 3px;
+    border-radius: 4px;
+}
+
+.actnow-code-block code::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* Inline Code - GitHub Style */
+.actnow-inline-code {
+    font-family: 'JetBrains Mono', 'Menlo', monospace;
+    font-size: 0.9em;
+    background: rgba(175, 184, 193, 0.2);
+    padding: 0.2em 0.4em;
+    border-radius: 6px;
+    color: #24292f;
+}
+
+[data-theme="dark"] .actnow-inline-code {
+    background: rgba(110, 118, 129, 0.4);
+    color: #e6edf3;
+}
+
+/* 
+   SYNTAX HIGHLIGHTING COLORS (Dracula-inspired) 
+*/
+.hljs-keyword { color: #ff79c6; font-weight: bold; }
+.hljs-string { color: #f1fa8c; }
+.hljs-comment { color: #6272a4; font-style: italic; }
+.hljs-number { color: #bd93f9; }
+.hljs-function { color: #50fa7b; }
+.hljs-variable { color: #f8f8f2; }
+.hljs-operator { color: #ff79c6; }
+.hljs-class { color: #8be9fd; }
+
+/* 
+   TOKEN COUNTER 
+*/
+.actnow-token-counter {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 4px;
+    text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.actnow-token-counter:hover {
+    opacity: 1;
+}
+
+.actnow-token-icon {
+    font-size: 10px;
+}
+
+/* MARKDOWN ELEMENTS */
+.actnow-message-content ul, 
+.actnow-message-content ol {
+    padding-left: 24px;
+    margin: 8px 0;
+}
+
+.actnow-message-content li {
+    margin-bottom: 4px;
+    position: relative;
+}
+
+.actnow-message-content h1, 
+.actnow-message-content h2, 
+.actnow-message-content h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.actnow-message-content blockquote {
+    border-left: 4px solid var(--neutral-300);
+    margin: 12px 0;
+    padding-left: 16px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+[data-theme="dark"] .actnow-message-content blockquote {
+    border-left-color: var(--neutral-600);
 }
 
 /* User Message Specifics */
@@ -821,17 +954,50 @@
     z-index: 1;
 }
 
-/* Model Selector - Searchable Dropdown */
-.actnow-model-selector {
-    padding: 0;
-    margin-top: 8px;
-    margin-bottom: 0;
+/* ============================================
+   INPUT FOOTER (Model + Tokens)
+   ============================================ */
+.actnow-input-footer {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
     gap: 8px;
-    background: transparent;
-    border: none;
-    width: fit-content;
+    padding: 0 4px;
+}
+
+/* Model Selector - Reset Margins */
+.actnow-model-selector {
+    margin: 0;
+    flex-shrink: 1; /* Allow shrinking if needed */
+    min-width: 0;   /* Enable flexbox shrinking */
+}
+
+.actnow-model-dropdown {
+    width: 100%;
+}
+
+/* Token Counter - Reset Margins & Align */
+.actnow-token-counter {
+    margin: 0;
+    flex-shrink: 0;
+    white-space: nowrap;
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-light);
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.actnow-token-counter:hover {
+    opacity: 1;
+}
+
+[data-theme="dark"] .actnow-token-counter {
+    color: var(--text-secondary);
 }
 
 .actnow-model-label {

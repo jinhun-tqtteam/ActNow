@@ -267,35 +267,43 @@
                                 <div id="actnow-send-hint" class="actnow-send-hint" style="display:none;"></div>
                             </div>
 
-                            <!-- Model Selector - Searchable -->
-                            <div class="actnow-model-selector">
-                                <label class="actnow-model-label">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
-                                    Model
-                                </label>
-                                <div class="actnow-model-dropdown" id="actnow-model-dropdown">
-                                    <button type="button" class="actnow-model-trigger" id="actnow-model-trigger">
-                                        <span class="actnow-model-value" id="actnow-model-value">Select model...</span>
-                                        <svg class="actnow-model-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                            <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <!-- Footer: Model + Tokens -->
+                            <div class="actnow-input-footer">
+                                <!-- Model Selector - Searchable -->
+                                <div class="actnow-model-selector">
+                                    <label class="actnow-model-label">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
-                                    </button>
-                                    <div class="actnow-model-menu" id="actnow-model-menu">
-                                        <div class="actnow-model-search-wrapper">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                                                <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
-                                                <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        Model
+                                    </label>
+                                    <div class="actnow-model-dropdown" id="actnow-model-dropdown">
+                                        <button type="button" class="actnow-model-trigger" id="actnow-model-trigger">
+                                            <span class="actnow-model-value" id="actnow-model-value">Select model...</span>
+                                            <svg class="actnow-model-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                             </svg>
-                                            <input type="text" class="actnow-model-search" id="actnow-model-search" placeholder="Search models...">
-                                        </div>
-                                        <div class="actnow-model-list" id="actnow-model-list">
-                                            <div class="actnow-model-loading">Loading models...</div>
+                                        </button>
+                                        <div class="actnow-model-menu" id="actnow-model-menu">
+                                            <div class="actnow-model-search-wrapper">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                                    <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                                                    <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                </svg>
+                                                <input type="text" class="actnow-model-search" id="actnow-model-search" placeholder="Search models...">
+                                            </div>
+                                            <div class="actnow-model-list" id="actnow-model-list">
+                                                <div class="actnow-model-loading">Loading models...</div>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                <!-- Token Counter -->
+                                <div id="actnow-token-counter" class="actnow-token-counter">
+                                    <span class="actnow-token-icon">🪙</span> ~0 tokens
                                 </div>
                             </div>
                         </div>
@@ -474,6 +482,48 @@
                      this.handleSelection();
                  }
             });
+
+            // Delegate Click for Copy Code Buttons
+            const messagesArea2 = get('actnow-messages');
+            if (messagesArea2) {
+                messagesArea2.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.actnow-copy-btn');
+                    if (btn) {
+                        const code = btn.getAttribute('data-code');
+                        if (code) {
+                            // Decode HTML entities since we stored escaped code
+                            const textarea = document.createElement('textarea');
+                            textarea.value = this.decodeHtml(code);
+                            document.body.appendChild(textarea);
+                            textarea.select();
+                            
+                            try {
+                                document.execCommand('copy');
+                                const originalText = btn.innerHTML;
+                                btn.innerHTML = `
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 6L9 17l-5-5"></path>
+                                    </svg>
+                                    Copied!
+                                `;
+                                setTimeout(() => {
+                                    btn.innerHTML = originalText;
+                                }, 2000);
+                            } catch (err) {
+                                console.error('Failed to copy', err);
+                            }
+                            
+                            document.body.removeChild(textarea);
+                        }
+                    }
+                });
+            }
+        }
+
+        decodeHtml(text) {
+            const txt = document.createElement('textarea');
+            txt.innerHTML = text;
+            return txt.value;
         }
 
         handleSelection() {
@@ -1657,67 +1707,14 @@
         }
         
         // Better Markdown Parser (more robust)
-        formatMessage(text) {
-             if (!text) return '';
-             
-             // 1. Escape HTML
-             let html = this.escapeHtml(text.trim());
-             
-             // 2. Code Blocks
-             const blocks = [];
-             html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, content) => {
-                 blocks.push({ lang, content });
-                 return `__BLOCK_${blocks.length - 1}__`;
-             });
-             
-             // 3. Inline formatting
-             html = html
-                .replace(/`([^`]+)`/g, '<code class="actnow-inline-code">$1</code>')
-                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-             
-             // 4. Block formatting (Headers, Lists)
-             const lines = html.split('\n');
-             let inList = false;
-             let processedLines = lines.map(line => {
-                 // Headers
-                 if (line.match(/^#{1,6}\s/)) {
-                     const level = line.match(/^#{1,6}/)[0].length;
-                     return `<h${level}>${line.replace(/^#{1,6}\s/, '')}</h${level}>`;
-                 }
-                 // Lists
-                 if (line.match(/^\s*-\s/)) {
-                     if (!inList) {
-                         inList = true;
-                         return '<ul><li>' + line.replace(/^\s*-\s/, '') + '</li>';
-                     }
-                     return '<li>' + line.replace(/^\s*-\s/, '') + '</li>';
-                 } else if (inList) {
-                     inList = false;
-                     return '</ul>' + line;
-                 }
-                 return line;
-             });
-             
-             if (inList) processedLines.push('</ul>');
-             html = processedLines.join('\n');
-             
-             // 5. Restore Code Blocks
-             html = html.replace(/__BLOCK_(\d+)__/g, (match, id) => {
-                 const block = blocks[id];
-                 return `<pre class="actnow-code-block"><div class="actnow-code-header">${block.lang || 'text'}</div><code>${block.content}</code></pre>`;
-             });
-             
-             // 6. Final cleanup (Newlines to <br>, but avoid double spacing blocks)
-             // Replace \n with <br> only if not followed by block tag
-             html = html.replace(/\n/g, '<br>');
-             
-             // Remove <br> before/after block elements to avoid gaps
-             html = html.replace(/<br><(h\d|pre|ul|li)/g, '<$1');
-             html = html.replace(/(<\/h\d>|<\/pre>|<\/ul>|<\/li>)<br>/g, '$1');
-             
-             return html;
+        formatMessage(content) {
+            // Use the new MarkdownEngine if available
+            if (window.ActNowMarkdown) {
+                return window.ActNowMarkdown.parse(content);
+            }
+            
+            // Fallback (should not happen if manifest is correct)
+            return this.escapeHtml(content).replace(/\n/g, '<br>');
         }
 
         applyTheme(theme) {
@@ -1731,18 +1728,65 @@
             }
         }
 
+        updateTokenCount(text) {
+             const inputArea = this.shadowRoot.querySelector('.actnow-input-area');
+             if (!inputArea) return;
+             
+             let counter = this.shadowRoot.getElementById('actnow-token-counter');
+             if (!counter) {
+                 counter = document.createElement('div');
+                 counter.id = 'actnow-token-counter';
+                 counter.className = 'actnow-token-counter';
+                 inputArea.appendChild(counter);
+             }
+             
+             // Always show counter, even if text is empty (for testing/verification)
+             counter.style.opacity = '1';
+             
+             let count = 0;
+             if (window.ActNowMarkdown) {
+                 count = window.ActNowMarkdown.estimateTokens(text || '');
+             } else {
+                 count = Math.ceil((text || '').length / 4);
+             }
+             
+             // Add context tokens if selected
+             if (this.state.selectedText) {
+                 const contextTokens = Math.ceil(this.state.selectedText.length / 4);
+                 counter.innerHTML = `
+                    <span class="actnow-token-icon">🪙</span> 
+                    ~${count} + ${contextTokens} (context) tokens
+                 `;
+             } else {
+                 counter.innerHTML = `
+                    <span class="actnow-token-icon">🪙</span> 
+                    ~${count} tokens
+                 `;
+             }
+        }
+
         updateSendButtonState() {
+            const input = this.shadowRoot.getElementById('actnow-message-input');
             const btn = this.shadowRoot.getElementById('actnow-send-btn');
             const hint = this.shadowRoot.getElementById('actnow-send-hint');
             const missingApi = !this.state.apiKey;
             const missingModel = !this.state.model;
             const busy = this.state.isProcessingQueue || this.state.isStreaming;
-            const disabled = missingApi || missingModel || busy;
+            // Also disable if input is empty, but only if we have everything else
+            // Actually, let's keep the existing logic but just check input for token count
+            
+            // The original logic didn't check for empty input in disabled state?
+            // Let's check the original code again.
+            // Original: const disabled = missingApi || missingModel || busy;
+            // It seems it didn't check for empty input. Let's add that for better UX.
+            const hasText = input && input.value.trim().length > 0;
+            const disabled = missingApi || missingModel || busy || !hasText;
 
             console.log('🔘 Updating send button state:', {
                 missingApi,
                 missingModel,
                 busy,
+                hasText,
                 disabled
             });
 
@@ -1766,6 +1810,10 @@
                 } else {
                     hint.style.display = 'none';
                 }
+            }
+            
+            if (input) {
+                this.updateTokenCount(input.value);
             }
         }
 
