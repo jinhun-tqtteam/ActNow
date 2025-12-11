@@ -13,19 +13,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Set up event listeners
     setupEventListeners();
 
-    // Check API key status and load models if key exists
-    const result = await chrome.storage.sync.get(['apiKey']);
-    if (result.apiKey) {
-        await checkApiKeyStatus();
-        await loadModels();
-    }
+    // Initial check
+    await handleProviderChange();
 });
 
 // Load settings from storage
 async function loadSettings() {
     try {
         const result = await chrome.storage.sync.get([
-            'apiKey',
+            'apiKey', // Legacy/OpenRouter key
+            'provider',
+            'openaiBaseUrl',
+            'openaiApiKey',
             'model',
             'theme',
             'maxTokens',
@@ -35,7 +34,17 @@ async function loadSettings() {
             'soundNotifications'
         ]);
 
+        // Provider
+        document.getElementById('provider').value = result.provider || 'openrouter';
+        
+        // OpenRouter (Legacy apiKey)
         document.getElementById('api-key').value = result.apiKey || '';
+        
+        // OpenAI
+        document.getElementById('openai-base-url').value = result.openaiBaseUrl || 'https://api.openai.com/v1';
+        document.getElementById('openai-api-key').value = result.openaiApiKey || '';
+
+        // Other settings
         document.getElementById('theme').value = result.theme || 'light';
         document.getElementById('max-tokens').value = result.maxTokens || 1000;
         document.getElementById('temperature').value = result.temperature || 0.7;
@@ -44,16 +53,29 @@ async function loadSettings() {
         document.getElementById('auto-open').checked = result.autoOpen === true;
         document.getElementById('sound-notifications').checked = result.soundNotifications === true;
 
+        // Toggle UI based on provider
+        toggleProviderUI(result.provider || 'openrouter');
+
         // Set model after loading models (or set default)
-        if (result.model) {
-            // Wait a bit for models to load
-            setTimeout(() => {
+        // We delay model loading slightly to ensure UI is ready
+        setTimeout(async () => {
+            if (result.apiKey || result.openaiApiKey) {
+                await checkApiKeyStatus();
+                await loadModels();
+            }
+            
+            if (result.model) {
                 const modelSelect = document.getElementById('model');
-                if (modelSelect && modelSelect.querySelector(`option[value="${result.model}"]`)) {
-                    modelSelect.value = result.model;
+                // We might need to manually add the option if it wasn't loaded
+                if (modelSelect && !modelSelect.querySelector(`option[value="${result.model}"]`)) {
+                     const opt = document.createElement('option');
+                     opt.value = result.model;
+                     opt.textContent = result.model + ' (Saved)';
+                     modelSelect.appendChild(opt);
                 }
-            }, 500);
-        }
+                modelSelect.value = result.model;
+            }
+        }, 100);
 
         // Update version
         const manifest = chrome.runtime.getManifest();
@@ -64,6 +86,52 @@ async function loadSettings() {
         showMessage('Failed to load settings', 'error');
     }
 }
+
+function toggleProviderUI(provider) {
+    const orConfig = document.getElementById('config-openrouter');
+    const oaConfig = document.getElementById('config-openai');
+    
+    // Safety check
+    if (!orConfig || !oaConfig) {
+        console.error('Config elements not found:', { orConfig, oaConfig });
+        return;
+    }
+    
+    if (provider === 'openai') {
+        orConfig.style.display = 'none';
+        oaConfig.style.display = 'block';
+    } else {
+        orConfig.style.display = 'block';
+        oaConfig.style.display = 'none';
+    }
+}
+
+async function handleProviderChange() {
+    const provider = document.getElementById('provider').value;
+    toggleProviderUI(provider);
+    
+    // Clear status and models when switching
+    updateApiStatus('Provider changed - please test key', 'loading');
+    document.getElementById('model').innerHTML = '<option value="">Load models to select</option>';
+}
+
+function getCurrentConfig() {
+    const provider = document.getElementById('provider').value;
+    if (provider === 'openai') {
+        return {
+            provider,
+            key: document.getElementById('openai-api-key').value.trim(),
+            url: document.getElementById('openai-base-url').value.trim().replace(/\/$/, '') + '/models'
+        };
+    } else {
+        return {
+            provider,
+            key: document.getElementById('api-key').value.trim(),
+            url: 'https://openrouter.ai/api/v1/models'
+        };
+    }
+}
+
 
 // Chips Management
 let editingChipId = null;
@@ -248,7 +316,13 @@ function escapeHtml(text) {
 async function saveSettings() {
     try {
         const settings = {
+            provider: document.getElementById('provider').value,
+            // OpenRouter
             apiKey: document.getElementById('api-key').value.trim(),
+            // OpenAI
+            openaiBaseUrl: document.getElementById('openai-base-url').value.trim(),
+            openaiApiKey: document.getElementById('openai-api-key').value.trim(),
+            
             model: document.getElementById('model').value,
             theme: document.getElementById('theme').value,
             maxTokens: parseInt(document.getElementById('max-tokens').value),
@@ -311,38 +385,7 @@ async function loadStatistics() {
 
 // Check API key validity
 async function checkApiKeyStatus() {
-    const apiKey = document.getElementById('api-key').value.trim();
-    const statusDot = document.getElementById('api-status-dot');
-    const statusText = document.getElementById('api-status-text');
-
-    if (!apiKey) {
-        statusDot.className = 'status-dot';
-        statusText.textContent = 'Not configured';
-        return;
-    }
-
-    statusDot.className = 'status-dot';
-    statusText.textContent = 'Checking...';
-
-    try {
-        const response = await fetch('https://openrouter.ai/api/v1/models', {
-            headers: {
-                'Authorization': `Bearer ${apiKey}`
-            }
-        });
-
-        if (response.ok) {
-            statusDot.className = 'status-dot valid';
-            statusText.textContent = 'Valid API key';
-        } else {
-            statusDot.className = 'status-dot invalid';
-            statusText.textContent = 'Invalid API key';
-        }
-
-    } catch (error) {
-        statusDot.className = 'status-dot invalid';
-        statusText.textContent = 'Could not verify API key';
-    }
+    return testApiKey();
 }
 
 // Clear all conversation history
@@ -467,10 +510,20 @@ function setupEventListeners() {
     // Auto-save on change
     const inputs = document.querySelectorAll('input, select');
     inputs.forEach(input => {
+        if (input.id === 'provider') return;
         input.addEventListener('change', () => {
             saveSettings();
         });
     });
+    
+    // Provider change
+    const providerSelect = document.getElementById('provider');
+    if (providerSelect) {
+        providerSelect.addEventListener('change', async () => {
+            await handleProviderChange();
+            saveSettings();
+        });
+    }
 
     // Temperature slider
     const tempSlider = document.getElementById('temperature');
@@ -487,14 +540,15 @@ function setupEventListeners() {
     // Refresh models button
     document.getElementById('refresh-models-btn').addEventListener('click', loadModels);
 
-    // API key field - check status on blur and load models if valid
-    document.getElementById('api-key').addEventListener('blur', async () => {
+    // API key fields - check status on blur
+    const checkAndLoad = async () => {
         await checkApiKeyStatus();
-        const apiKey = document.getElementById('api-key').value.trim();
-        if (apiKey) {
-            await loadModels();
-        }
-    });
+        await loadModels();
+    };
+
+    document.getElementById('api-key').addEventListener('blur', checkAndLoad);
+    document.getElementById('openai-api-key').addEventListener('blur', checkAndLoad);
+    document.getElementById('openai-base-url').addEventListener('blur', checkAndLoad);
 
     // Clear history
     document.getElementById('clear-history').addEventListener('click', clearHistory);
@@ -512,110 +566,109 @@ function setupEventListeners() {
 
 // Test API key
 async function testApiKey() {
-    const apiKey = document.getElementById('api-key').value.trim();
+    const config = getCurrentConfig();
     const testBtn = document.getElementById('test-api-btn');
-    const statusDot = document.getElementById('api-status-dot');
-    const statusText = document.getElementById('api-status-text');
 
-    if (!apiKey) {
+    if (!config.key) {
         updateApiStatus('Please enter an API key', 'invalid');
         return;
     }
 
-    // Disable button and show loading
     testBtn.disabled = true;
     testBtn.textContent = '🔄 Testing...';
     updateApiStatus('Testing API key...', 'loading');
 
     try {
-        const response = await fetch('https://openrouter.ai/api/v1/models', {
+        const endpoint = config.provider === 'openai' ? config.url : 'https://openrouter.ai/api/v1/models';
+        const response = await fetch(endpoint, {
             headers: {
-                'Authorization': `Bearer ${apiKey}`,
+                'Authorization': `Bearer ${config.key}`,
                 'Content-Type': 'application/json'
             }
         });
 
         if (response.ok) {
             const data = await response.json();
-            updateApiStatus(`✅ Valid! Found ${data.data.length} models`, 'valid');
-
-            // Load models after successful test
+            const count = config.provider === 'openai' ? (data.data ? data.data.length : 0) : data.data.length;
+            updateApiStatus(`✅ Valid! Found ${count} models`, 'valid');
             await loadModels();
         } else {
-            const error = await response.text();
             updateApiStatus(`❌ Invalid: ${response.status}`, 'invalid');
         }
     } catch (error) {
         updateApiStatus(`❌ Network error`, 'invalid');
         console.error('API Test error:', error);
     } finally {
-        // Re-enable button
         testBtn.disabled = false;
         testBtn.textContent = '🧪 Test API Key';
     }
 }
 
-// Load models from OpenRouter API
+// Load models from API (supports OpenRouter and OpenAI)
 async function loadModels() {
-    const apiKey = document.getElementById('api-key').value.trim();
+    const config = getCurrentConfig();
     const modelSelect = document.getElementById('model');
     const refreshBtn = document.getElementById('refresh-models-btn');
     const modelStatusText = document.getElementById('model-status-text');
 
-    if (!apiKey) {
+    if (!config.key) {
         modelStatusText.textContent = 'Please enter API key first';
         modelSelect.innerHTML = '<option value="">No API key</option>';
         return;
     }
 
-    // Disable button and show loading
     refreshBtn.disabled = true;
     refreshBtn.textContent = '🔄 Loading...';
     modelStatusText.textContent = 'Loading models...';
 
     try {
-        const response = await fetch('https://openrouter.ai/api/v1/models', {
+        const response = await fetch(config.url, {
             headers: {
-                'Authorization': `Bearer ${apiKey}`,
+                'Authorization': `Bearer ${config.key}`,
                 'Content-Type': 'application/json'
             }
         });
 
         if (response.ok) {
             const data = await response.json();
-            const models = data.data;
-
-            // Clear existing options
+            const models = data.data || [];
             modelSelect.innerHTML = '';
 
-            // Group models by provider
-            const modelGroups = {};
-            models.forEach(model => {
-                const provider = model.id.split('/')[0];
-                if (!modelGroups[provider]) {
-                    modelGroups[provider] = [];
-                }
-                modelGroups[provider].push(model);
-            });
-
-            // Add models to select
-            Object.keys(modelGroups).sort().forEach(provider => {
-                const optgroup = document.createElement('optgroup');
-                optgroup.label = provider.toUpperCase();
-
-                modelGroups[provider].forEach(model => {
+            if (config.provider === 'openai') {
+                models.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model.id;
-                    option.textContent = `${model.name} (${model.pricing?.prompt || 'Free'})`;
-                    optgroup.appendChild(option);
+                    option.textContent = model.id;
+                    modelSelect.appendChild(option);
+                });
+                modelStatusText.textContent = `✅ Loaded ${models.length} OpenAI models`;
+            } else {
+                const modelGroups = {};
+                models.forEach(model => {
+                    const provider = model.id.split('/')[0];
+                    if (!modelGroups[provider]) {
+                        modelGroups[provider] = [];
+                    }
+                    modelGroups[provider].push(model);
                 });
 
-                modelSelect.appendChild(optgroup);
-            });
+                Object.keys(modelGroups).sort().forEach(provider => {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = provider.toUpperCase();
 
-            modelStatusText.textContent = `✅ Loaded ${models.length} models from ${Object.keys(modelGroups).length} providers`;
+                    modelGroups[provider].forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.id;
+                        option.textContent = `${model.name} (${model.pricing?.prompt || 'Free'})`;
+                        optgroup.appendChild(option);
+                    });
+
+                    modelSelect.appendChild(optgroup);
+                });
+
+                modelStatusText.textContent = `✅ Loaded ${models.length} models from ${Object.keys(modelGroups).length} providers`;
+            }
             console.log('Models loaded successfully:', models);
-
         } else {
             modelStatusText.textContent = `❌ Failed to load models: ${response.status}`;
             modelSelect.innerHTML = '<option value="">Failed to load</option>';
@@ -625,7 +678,6 @@ async function loadModels() {
         modelSelect.innerHTML = '<option value="">Network error</option>';
         console.error('Model loading error:', error);
     } finally {
-        // Re-enable button
         refreshBtn.disabled = false;
         refreshBtn.textContent = '🔄 Refresh Models';
     }

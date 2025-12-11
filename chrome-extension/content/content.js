@@ -4,7 +4,7 @@
     console.log('🎬 ActNow content script loaded');
 
     // Prevent multiple injections
-    if (window.ActNowInstance) {
+    if (document.getElementById('actnow-extension-host')) {
         console.warn('⚠️ ActNow instance already exists, skipping initialization');
         return;
     }
@@ -24,7 +24,10 @@
                 isOpen: false,
                 isTyping: false,
                 messages: [],
+                provider: 'openrouter',
                 apiKey: null,
+                openaiApiKey: null,
+                openaiBaseUrl: null,
                 model: null,
                 theme: 'light',
                 maxTokens: 1000,
@@ -35,8 +38,14 @@
                 streamingMessageId: null,
                 isStreaming: false,
                 isResizing: false,
+                isDragging: false,
+                // Streaming Buffer State
+                streamTargetContent: '', // Full content received from API
+                streamDisplayContent: '', // Content currently shown (typewriter effect)
                 chatSize: { width: 380, height: 600 },
+                chatPosition: { x: null, y: null },
                 resizeStart: { x: 0, y: 0, width: 0, height: 0 },
+                dragStart: { x: 0, y: 0 },
                 // Conversation Management
                 conversationList: [],
                 isSidebarOpen: false,
@@ -48,6 +57,8 @@
 
             this.boundResizeMove = this.handleResizeMove.bind(this);
             this.boundResizeEnd = this.handleResizeEnd.bind(this);
+            this.boundDragMove = this.handleDragMove.bind(this);
+            this.boundDragEnd = this.handleDragEnd.bind(this);
             this.boundHandleSelection = this.handleSelection.bind(this);
         }
 
@@ -66,6 +77,9 @@
             this.renderWidget();
             console.log('✅ Widget rendered');
             
+            // Apply size and position now that widget exists
+            this.applyChatSizeAndPosition();
+            
             // Initial Render of dynamic content (since initializeState ran before DOM was ready)
             this.renderSidebar();
             this.renderMessages();
@@ -75,69 +89,8 @@
             this.setupRuntimeListeners();
             console.log('✅ Runtime listeners setup');
 
-            window.ActNowInstance = this;
-            
-            // Expose debug helpers
-            window.debugActNow = () => {
-                console.log('🔍 ActNow Debug Info:');
-                console.log('State:', this.state);
-                console.log('Shadow Root:', this.shadowRoot);
-                console.log('Host Element:', this.hostElement);
-                console.log('Send Button:', this.shadowRoot.getElementById('actnow-send-btn'));
-                console.log('Message Input:', this.shadowRoot.getElementById('actnow-message-input'));
-            };
-            
-            window.testActNowMessage = (msg = 'Hello, test message!') => {
-                console.log('🧪 Testing message send with:', msg);
-                const input = this.shadowRoot.getElementById('actnow-message-input');
-                if (input) {
-                    input.value = msg;
-                    this.sendMessage();
-                } else {
-                    console.error('❌ Input not found');
-                }
-            };
-            
-            window.testBackgroundConnection = async () => {
-                console.log('🧪 Testing background script connection...');
-                try {
-                    const port = chrome.runtime.connect({ name: 'test-connection' });
-                    console.log('✅ Port created successfully');
-                    
-                    let connectionWorked = false;
-                    
-                    port.onDisconnect.addListener(() => {
-                        if (chrome.runtime.lastError) {
-                            console.error('❌ Background script error:', chrome.runtime.lastError);
-                        } else {
-                            console.log('✅ Background script is running (port disconnected normally)');
-                            connectionWorked = true;
-                        }
-                    });
-                    
-                    // Give it time to connect and disconnect
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    port.disconnect();
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    return connectionWorked;
-                } catch (err) {
-                    console.error('❌ Failed to connect to background:', err);
-                    return false;
-                }
-            };
-            
+            // Security: Global instance exposure removed
             console.log('✅ ActNow instance ready');
-            console.log('💡 Debug commands available:');
-            console.log('   window.debugActNow() - Show state info');
-            console.log('   window.testActNowMessage("test") - Send a test message');
-            console.log('   window.testBackgroundConnection() - Test background script');
-            
-            // Test background connection on startup
-            setTimeout(() => {
-                console.log('🔍 Auto-testing background connection...');
-                window.testBackgroundConnection();
-            }, 500);
         }
 
         createHost() {
@@ -416,6 +369,13 @@
             resizeHandles.forEach(handle => {
                 handle.addEventListener('mousedown', (e) => this.handleResizeStart(e));
             });
+            
+            // Dragging (Header)
+            const header = get('actnow-chat-header');
+            if (header) {
+                header.style.cursor = 'grab'; // Visual cue
+                header.addEventListener('mousedown', (e) => this.handleDragStart(e));
+            }
 
             // Chips
             // Since chips are dynamic, we might need delegation or re-attach
@@ -571,16 +531,21 @@
         async initializeState() {
             console.log('📦 Loading settings from storage...');
             const settings = await chrome.storage.sync.get([
-                'apiKey', 'model', 'theme', 'maxTokens', 'temperature', 'conversationId', 'chatSize', 'customChips'
+                'apiKey', 'provider', 'openaiApiKey', 'openaiBaseUrl', 'model', 'theme', 'maxTokens', 'temperature', 'conversationId', 'chatSize', 'chatPosition', 'customChips'
             ]);
 
             console.log('📦 Settings loaded:', {
                 hasApiKey: !!settings.apiKey,
+                provider: settings.provider,
                 model: settings.model,
                 theme: settings.theme
             });
 
-            this.state.apiKey = settings.apiKey || null;
+            this.state.provider = settings.provider || 'openrouter';
+            this.state.apiKey = settings.apiKey || null; // OpenRouter Key
+            this.state.openaiApiKey = settings.openaiApiKey || null;
+            this.state.openaiBaseUrl = settings.openaiBaseUrl || 'https://api.openai.com/v1';
+            
             this.state.model = settings.model || DEFAULT_MODEL;
             this.state.theme = settings.theme || 'light';
             this.state.maxTokens = settings.maxTokens || 1000;
@@ -616,8 +581,13 @@
             if (settings.chatSize) {
                 this.state.chatSize = settings.chatSize;
             }
+
+            if (settings.chatPosition) {
+                this.state.chatPosition = settings.chatPosition;
+            }
             
-            this.applyChatSize();
+            // Container not ready yet, so we skip applying here
+            // this.applyChatSizeAndPosition();
 
             this.applyTheme(this.state.theme);
             
@@ -686,7 +656,15 @@
 
             chrome.storage.onChanged.addListener((changes, area) => {
                 if (area === 'sync') {
+                    if (changes.provider) {
+                        this.state.provider = changes.provider.newValue || 'openrouter';
+                        // Reload models when provider changes
+                        this.loadModelsToDropdown();
+                    }
                     if (changes.apiKey) this.state.apiKey = changes.apiKey.newValue;
+                    if (changes.openaiApiKey) this.state.openaiApiKey = changes.openaiApiKey.newValue;
+                    if (changes.openaiBaseUrl) this.state.openaiBaseUrl = changes.openaiBaseUrl.newValue;
+                    
                     if (changes.model) this.state.model = changes.model.newValue;
                     if (changes.theme) {
                         this.state.theme = changes.theme.newValue;
@@ -766,8 +744,14 @@
             }
 
             const content = input.value.trim();
+            
+            let currentKey = this.state.apiKey;
+            if (this.state.provider === 'openai') {
+                currentKey = this.state.openaiApiKey;
+            }
+
             console.log('📝 Message content:', content);
-            console.log('🔑 API Key:', this.state.apiKey ? 'Present' : 'Missing');
+            console.log('🔑 API Key:', currentKey ? 'Present' : 'Missing');
             console.log('🤖 Model:', this.state.model);
             console.log('⚙️ State:', {
                 isProcessingQueue: this.state.isProcessingQueue,
@@ -779,9 +763,9 @@
                 return;
             }
 
-            if (!this.state.apiKey) {
+            if (!currentKey) {
                 console.error('❌ API Key is missing');
-                alert('Please add your OpenRouter API key in Settings first!');
+                alert(`Please add your ${this.state.provider === 'openai' ? 'OpenAI' : 'OpenRouter'} API key in Settings first!`);
                 return;
             }
 
@@ -845,8 +829,16 @@
             this.state.messages.push(assistantMsg);
             this.state.streamingMessageId = assistantMsg.id;
             this.state.isStreaming = true;
+            
+            // Reset Buffers
+            this.state.streamTargetContent = '';
+            this.state.streamDisplayContent = '';
+            
             console.log('✅ Assistant message placeholder created');
             this.renderMessages();
+            
+            // Start the Typewriter Loop immediately
+            this.startTypeWriterLoop(assistantMsg.id);
 
             // Save immediately so user message persists even if reload happens during stream
             try {
@@ -865,6 +857,7 @@
                 // Setup listeners BEFORE sending message to avoid race condition
                 const streamPromise = new Promise((resolve, reject) => {
                     let hasEnded = false;
+                    let pendingRender = false;
                     
                     // Timeout after 30 seconds
                     const timeout = setTimeout(() => {
@@ -878,7 +871,7 @@
                     let firstChunkReceived = false;
                     
                     port.onMessage.addListener((msg) => {
-                        console.log('📨 Received message from background:', msg);
+                        // console.log('📨 Received message from background:', msg); // Reduce log noise
                         if (hasEnded) return;
                         
                         if (msg.error) {
@@ -893,17 +886,22 @@
                                 console.log('✅ First chunk received');
                             }
                             
-                            // Append chunk
-                            console.log('📦 Chunk received:', msg.chunk.substring(0, 50) + '...');
-                            const currentMsg = this.state.messages.find(m => m.id === assistantMsg.id);
-                            if (currentMsg) {
-                                currentMsg.content += msg.chunk;
-                                this.updateStreamingMessageUI(currentMsg);
-                            }
+                            // Append chunk to TARGET buffer only
+                            // The Typewriter Loop will handle the rendering
+                            this.state.streamTargetContent += msg.chunk;
+                            
                         } else if (msg.done) {
                             hasEnded = true;
                             clearTimeout(timeout);
+                            
+                            // Ensure final render happens
+                            const currentMsg = this.state.messages.find(m => m.id === assistantMsg.id);
+                            if (currentMsg) {
+                                this.updateStreamingMessageUI(currentMsg);
+                            }
+                            
                             console.log('✅ Stream completed');
+                            this.state.isApiDone = true; // Signal typewriter loop
                             resolve();
                         }
                     });
@@ -926,10 +924,25 @@
                 
                 // Now send the message after listeners are ready
                 console.log('📤 Sending chat request with model:', this.state.model);
+                
+                // Determine active key
+                let activeKey = this.state.apiKey;
+                let activeUrl = 'https://openrouter.ai/api/v1/chat/completions';
+                
+                if (this.state.provider === 'openai') {
+                    activeKey = this.state.openaiApiKey;
+                    // Ensure base URL ends with /chat/completions
+                    let base = this.state.openaiBaseUrl || 'https://api.openai.com/v1';
+                    base = base.replace(/\/$/, ''); // Remove trailing slash
+                    activeUrl = `${base}/chat/completions`;
+                }
+
                 const messagePayload = {
                     action: 'chat_completion',
                     data: {
-                        apiKey: this.state.apiKey,
+                        provider: this.state.provider,
+                        endpoint: activeUrl,
+                        apiKey: activeKey,
                         model: this.state.model,
                         messages: this.state.messages.slice(0, -1).map(m => ({
                             role: m.role,
@@ -963,29 +976,100 @@
                     currentMsg.content = `❌ Error: ${error.message}\n\nPlease check:\n• API key is valid\n• Model is available\n• Internet connection is active`;
                 }
             } finally {
-                this.state.isStreaming = false;
-                this.state.streamingMessageId = null;
-                this.saveConversation();
-                this.renderMessages();
-                this.state.isProcessingQueue = false;
-                this.updateSendButtonState();
-
-                // Process Queue
-                if (this.state.messageQueue.length > 0) {
-                    const next = this.state.messageQueue.shift();
-                    setTimeout(() => this.processMessage(next), 100);
-                }
+                // We DON'T set isStreaming = false here immediately.
+                // We let the Typewriter Loop finish rendering first.
+                // The loop handles the cleanup when it catches up.
             }
         }
 
+        startTypeWriterLoop(msgId) {
+            const loop = () => {
+                // Calculate lag (Target - Display)
+                const target = this.state.streamTargetContent;
+                let current = this.state.streamDisplayContent;
+                const lag = target.length - current.length;
+
+                // Stop condition: Stream finished AND we caught up
+                if (lag === 0) {
+                    if (this.state.isStreaming === false) {
+                        // Stream was marked done by logic below previously? 
+                        // No, processMessage sets isStreaming=false in finally block usually.
+                        // We need a way to know if API is truly done.
+                        // Let's modify: processMessage sets a flag 'apiDone' instead of isStreaming=false?
+                        // SIMPLER: Check if API is done implicitly by lack of updates? No.
+                        // Let's rely on `hasEnded` logic from processMessage closure? We can't accessing it.
+                        // FIX: We will change `processMessage` to set a custom flag `this.state.isApiDone`
+                        // and `this.state.isStreaming` stays true until loop finishes.
+                        return; // Wait for more data or end signal
+                    }
+                }
+
+                if (lag > 0) {
+                    // Adaptive Speed Control
+                    // 1. Base speed: 1 char per frame (60 chars/sec) - very smooth
+                    // 2. Catch-up: If lag > 10, speed up. If lag > 50, speed up more.
+                    let step = 1;
+                    if (lag > 50) step = 5;
+                    else if (lag > 20) step = 3;
+                    else if (lag > 10) step = 2;
+
+                    // Append chars
+                    const nextChars = target.substr(current.length, step);
+                    this.state.streamDisplayContent += nextChars;
+                    
+                    // Update Message Object & UI
+                    const msg = this.state.messages.find(m => m.id === msgId);
+                    if (msg) {
+                        msg.content = this.state.streamDisplayContent;
+                        this.updateStreamingMessageUI(msg);
+                    }
+                } 
+                
+                // Check for completion
+                if (this.state.isApiDone && this.state.streamDisplayContent.length >= this.state.streamTargetContent.length) {
+                    console.log('🏁 Typewriter finished');
+                    this.state.isStreaming = false;
+                    this.state.isApiDone = false;
+                    this.state.streamingMessageId = null;
+                    this.saveConversation();
+                    this.renderMessages(); // Final clean render
+                    this.state.isProcessingQueue = false;
+                    this.updateSendButtonState();
+                    
+                    // Process Queue
+                    if (this.state.messageQueue.length > 0) {
+                        const next = this.state.messageQueue.shift();
+                        setTimeout(() => this.processMessage(next), 100);
+                    }
+                    return; // Stop looping
+                }
+
+                requestAnimationFrame(loop);
+            };
+            
+            this.state.isApiDone = false; // Reset flag
+            loop();
+        }
+
         updateStreamingMessageUI(msg) {
+             const container = this.shadowRoot.getElementById('actnow-messages');
+             
+             // User requested to DISABLE auto-scrolling completely during stream
+             // to prevent reading disruption.
+             // const threshold = 10;
+             // const isAtBottom = container ? (container.scrollHeight - container.scrollTop - container.clientHeight <= threshold) : true;
+
              const msgEl = this.shadowRoot.querySelector(`[data-message-id="${msg.id}"]`);
              if (msgEl) {
                  const contentEl = msgEl.querySelector('.actnow-message-content');
                  if (contentEl) {
                      // Update content with streaming cursor
-                     contentEl.innerHTML = this.formatMessage(msg.content) + '<span class="actnow-streaming-cursor"></span>';
-                     this.scrollToBottom();
+                     contentEl.innerHTML = this.formatMessage(msg.content); // Cursor removed per user request
+                     
+                     // Auto-scroll disabled per user request
+                     // if (isAtBottom && container) {
+                     //    container.scrollTop = container.scrollHeight;
+                     // }
                  }
              } else {
                  // If element not found, re-render all messages
@@ -1033,9 +1117,10 @@
                      `;
                 } else {
                      contentHTML = this.formatMessage(msg.content);
-                     if (msg.id === this.state.streamingMessageId) {
-                         contentHTML += '<span class="actnow-streaming-cursor"></span>';
-                     }
+                     // Cursor removed per user request
+                     // if (msg.id === this.state.streamingMessageId) {
+                     //    contentHTML += '<span class="actnow-streaming-cursor"></span>';
+                     // }
                 }
 
                 const isUser = msg.role === 'user';
@@ -1325,7 +1410,97 @@
             });
         }
         
-        // Resize Logic
+        // ==========================================
+        // DRAG & RESIZE LOGIC (IMPROVED)
+        // ==========================================
+
+        handleDragStart(e) {
+            // Only allow dragging from header, ignore if clicked on buttons
+            if (e.target.closest('button') || e.target.closest('.actnow-icon-btn-modern')) return;
+            
+            e.preventDefault();
+            
+            const container = this.shadowRoot.getElementById('actnow-chat-container');
+            if (!container) return;
+
+            this.state.isDragging = true;
+            
+            // If we haven't positioned it yet (using default CSS), we need to get current rect
+            const rect = container.getBoundingClientRect();
+            
+            // If this is the first drag, or if we were in default mode
+            if (this.state.chatPosition.x === null) {
+                this.state.chatPosition = {
+                    x: rect.left,
+                    y: rect.top
+                };
+            }
+            
+            this.state.dragStart = {
+                startX: e.clientX,
+                startY: e.clientY,
+                initialLeft: this.state.chatPosition.x !== null ? this.state.chatPosition.x : rect.left,
+                initialTop: this.state.chatPosition.y !== null ? this.state.chatPosition.y : rect.top
+            };
+
+            // Switch to fixed positioning immediately to prevent jumping
+            this.applyChatSizeAndPosition();
+
+            document.addEventListener('mousemove', this.boundDragMove);
+            document.addEventListener('mouseup', this.boundDragEnd);
+            
+            container.style.transition = 'none'; // Disable transition for smooth drag
+            container.style.cursor = 'grabbing';
+            console.log('🖱️ Drag started');
+        }
+
+        handleDragMove(e) {
+            if (!this.state.isDragging) return;
+            
+            const deltaX = e.clientX - this.state.dragStart.startX;
+            const deltaY = e.clientY - this.state.dragStart.startY;
+            
+            let newX = this.state.dragStart.initialLeft + deltaX;
+            let newY = this.state.dragStart.initialTop + deltaY;
+            
+            // Viewport Constraints
+            const container = this.shadowRoot.getElementById('actnow-chat-container');
+            const width = container ? container.offsetWidth : 400;
+            const height = container ? container.offsetHeight : 600;
+            
+            // Keep at least 20px visible
+            const minVisible = 20;
+            const maxX = window.innerWidth - minVisible;
+            const maxY = window.innerHeight - minVisible;
+            const minX = minVisible - width;
+            const minY = 0; // Don't allow going above top edge (header access)
+
+            // Clamp
+            newX = Math.min(Math.max(newX, minX), maxX);
+            newY = Math.min(Math.max(newY, minY), maxY);
+
+            this.state.chatPosition = { x: newX, y: newY };
+            this.applyChatSizeAndPosition();
+        }
+
+        handleDragEnd() {
+            if (!this.state.isDragging) return;
+            
+            this.state.isDragging = false;
+            document.removeEventListener('mousemove', this.boundDragMove);
+            document.removeEventListener('mouseup', this.boundDragEnd);
+            
+            const container = this.shadowRoot.getElementById('actnow-chat-container');
+            if (container) {
+                container.style.cursor = '';
+                container.style.transition = '';
+            }
+            
+            // Save position
+            chrome.storage.sync.set({ chatPosition: this.state.chatPosition });
+            console.log('💾 Position saved:', this.state.chatPosition);
+        }
+
         handleResizeStart(e) {
             e.preventDefault();
             e.stopPropagation();
@@ -1335,13 +1510,19 @@
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             const rect = container.getBoundingClientRect();
             
+            // If starting a resize and we are in default position, snap to absolute coords first
+            if (this.state.chatPosition.x === null) {
+                this.state.chatPosition = { x: rect.left, y: rect.top };
+                this.applyChatSizeAndPosition();
+            }
+
             this.state.resizeStart = {
                 x: e.clientX,
                 y: e.clientY,
                 width: this.state.chatSize.width,
                 height: this.state.chatSize.height,
-                left: rect.left,
-                top: rect.top,
+                left: this.state.chatPosition.x, // Use stored position
+                top: this.state.chatPosition.y,  // Use stored position
                 type: e.target.getAttribute('data-resize')
             };
             
@@ -1349,7 +1530,6 @@
             document.addEventListener('mouseup', this.boundResizeEnd);
             
             container.style.transition = 'none';
-            console.log('📏 Resize started:', this.state.resizeStart.type);
         }
 
         handleResizeMove(e) {
@@ -1387,11 +1567,12 @@
             const maxW = window.innerWidth - 40;
             const maxH = window.innerHeight - 40;
             
-            // Apply constraints
+            // Apply constraints (adjust position if resizing from left/top)
             if (newW < minW) {
                 if (type.includes('w')) newX = this.state.resizeStart.left + (this.state.resizeStart.width - minW);
                 newW = minW;
             } else if (newW > maxW) {
+                if (type.includes('w')) newX = this.state.resizeStart.left + (this.state.resizeStart.width - maxW); // Corrected logic
                 newW = maxW;
             }
             
@@ -1399,11 +1580,17 @@
                 if (type.includes('n')) newY = this.state.resizeStart.top + (this.state.resizeStart.height - minH);
                 newH = minH;
             } else if (newH > maxH) {
+                if (type.includes('n')) newY = this.state.resizeStart.top + (this.state.resizeStart.height - maxH);
                 newH = maxH;
             }
 
             this.state.chatSize = { width: newW, height: newH };
-            this.applyChatSize();
+            // Update position if it changed
+            if (newX !== this.state.resizeStart.left || newY !== this.state.resizeStart.top) {
+                this.state.chatPosition = { x: newX, y: newY };
+            }
+            
+            this.applyChatSizeAndPosition();
         }
 
         handleResizeEnd() {
@@ -1416,22 +1603,67 @@
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             if (container) container.style.transition = '';
             
-            // Save size
-            chrome.storage.sync.set({ chatSize: this.state.chatSize });
-            console.log('💾 Size saved');
+            // Save size and position
+            chrome.storage.sync.set({ 
+                chatSize: this.state.chatSize,
+                chatPosition: this.state.chatPosition
+            });
+            console.log('💾 Size & Position saved');
         }
 
-        applyChatSize() {
+        applyChatSizeAndPosition() {
             const container = this.shadowRoot.getElementById('actnow-chat-container');
-            if (!container) {
-                console.error('❌ Container not found in applyChatSize');
-                return;
-            }
+            if (!container) return;
             
-            // Apply size only - position is handled by CSS
+            // 1. Apply Size
             container.style.width = this.state.chatSize.width + 'px';
             container.style.height = this.state.chatSize.height + 'px';
+            
+            // 2. Apply Position
+            // If we have a stored custom position, use it (Fixed Positioning)
+            if (this.state.chatPosition.x !== null && this.state.chatPosition.y !== null) {
+                // Sanity Check: Ensure position is on screen
+                const minVisible = 40;
+                let safeX = this.state.chatPosition.x;
+                let safeY = this.state.chatPosition.y;
+                
+                if (safeX > window.innerWidth - minVisible) safeX = window.innerWidth - 380;
+                if (safeX < -340) safeX = 20; // Reset if too far left
+                if (safeY > window.innerHeight - minVisible) safeY = window.innerHeight - 500;
+                if (safeY < 0) safeY = 20;
+                
+                // Reset to default if extremely weird values (e.g. from previous buggy state)
+                if (isNaN(safeX) || isNaN(safeY)) {
+                    console.warn('⚠️ Invalid position detected, resetting to default');
+                    this.state.chatPosition = { x: null, y: null };
+                    container.style.position = '';
+                    container.style.left = '';
+                    container.style.top = '';
+                    container.style.right = '';
+                    container.style.bottom = '';
+                    container.style.transform = '';
+                    return;
+                }
+
+                container.style.position = 'fixed';
+                container.style.left = safeX + 'px';
+                container.style.top = safeY + 'px';
+                container.style.right = 'auto';
+                container.style.bottom = 'auto';
+                container.style.transform = 'none'; // Remove center transform
+                container.style.margin = '0';
+            } else {
+                // Default Mode: Use CSS class defaults (Right Center)
+                // We clear inline styles so CSS takes over
+                container.style.position = '';
+                container.style.left = '';
+                container.style.top = '';
+                container.style.right = '';
+                container.style.bottom = '';
+                container.style.transform = '';
+            }
         }
+
 
         // Model Selector - Searchable Dropdown
         setupModelDropdown() {
@@ -1567,8 +1799,18 @@
                 return;
             }
             
-            if (!this.state.apiKey) {
-                list.innerHTML = '<div class="actnow-model-empty">Configure API key in settings</div>';
+            let activeKey = this.state.apiKey;
+            let modelsUrl = 'https://openrouter.ai/api/v1/models';
+            
+            if (this.state.provider === 'openai') {
+                activeKey = this.state.openaiApiKey;
+                let base = this.state.openaiBaseUrl || 'https://api.openai.com/v1';
+                base = base.replace(/\/$/, '');
+                modelsUrl = `${base}/models`;
+            }
+            
+            if (!activeKey) {
+                list.innerHTML = `<div class="actnow-model-empty">Configure ${this.state.provider === 'openai' ? 'OpenAI' : 'OpenRouter'} API key</div>`;
                 if (valueEl) valueEl.textContent = 'No API key';
                 console.warn('⚠️ No API key configured');
                 return;
@@ -1577,8 +1819,8 @@
             list.innerHTML = '<div class="actnow-model-loading">Loading models...</div>';
             
             try {
-                const res = await fetch('https://openrouter.ai/api/v1/models', {
-                    headers: { Authorization: `Bearer ${this.state.apiKey}` }
+                const res = await fetch(modelsUrl, {
+                    headers: { Authorization: `Bearer ${activeKey}` }
                 });
                 
                 if (!res.ok) {
@@ -1587,14 +1829,23 @@
                 
                 const data = await res.json();
                 
-                // Store models in state for filtering
-                this.state.modelsList = data.data
-                    .map(m => ({ 
-                        id: m.id, 
-                        name: m.name || m.id,
-                        pricing: m.pricing
-                    }))
-                    .sort((a, b) => a.name.localeCompare(b.name));
+                if (this.state.provider === 'openai') {
+                    // OpenAI Format
+                    this.state.modelsList = (data.data || []).map(m => ({
+                        id: m.id,
+                        name: m.id, // OpenAI usually just has ID
+                        pricing: null
+                    })).sort((a, b) => a.id.localeCompare(b.id));
+                } else {
+                    // OpenRouter Format
+                    this.state.modelsList = data.data
+                        .map(m => ({ 
+                            id: m.id, 
+                            name: m.name || m.id,
+                            pricing: m.pricing
+                        }))
+                        .sort((a, b) => a.name.localeCompare(b.name));
+                }
                 
                 // Render initial list
                 this.filterModels('');
@@ -1605,6 +1856,9 @@
                     if (current && valueEl) {
                         valueEl.textContent = current.name;
                         valueEl.title = current.id;
+                    } else if (valueEl) {
+                         // Keep saved model even if not in list (might be custom or offline)
+                         valueEl.textContent = this.state.model;
                     }
                 } else if (this.state.modelsList.length > 0) {
                     // Select first model by default
@@ -1769,7 +2023,15 @@
             const input = this.shadowRoot.getElementById('actnow-message-input');
             const btn = this.shadowRoot.getElementById('actnow-send-btn');
             const hint = this.shadowRoot.getElementById('actnow-send-hint');
-            const missingApi = !this.state.apiKey;
+            
+            let hasKey = false;
+            if (this.state.provider === 'openai') {
+                hasKey = !!this.state.openaiApiKey;
+            } else {
+                hasKey = !!this.state.apiKey;
+            }
+            
+            const missingApi = !hasKey;
             const missingModel = !this.state.model;
             const busy = this.state.isProcessingQueue || this.state.isStreaming;
             // Also disable if input is empty, but only if we have everything else
@@ -1802,7 +2064,7 @@
             
             if (hint) {
                 if (missingApi) {
-                    hint.textContent = 'Add your OpenRouter API key to start chatting.';
+                    hint.textContent = `Add your ${this.state.provider === 'openai' ? 'OpenAI' : 'OpenRouter'} API key to start.`;
                     hint.style.display = 'block';
                 } else if (missingModel) {
                     hint.textContent = 'Choose an AI model before sending.';

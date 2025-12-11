@@ -5,17 +5,12 @@
 
 /* ============================================
    CSS VARIABLES - NEUTRAL COLOR PALETTE
+   (Moved to Host/Global Scope to avoid Wrapper dependency)
    ============================================ */
-#actnow-chat-widget {
-    position: fixed;
-    top: 50%;
-    right: 0;
-    transform: translateY(-50%);
-    z-index: 2147483647;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 14px;
+:host {
+    font-family: 'Söhne', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Ubuntu', 'Cantarell', 'Noto Sans', sans-serif, 'Helvetica Neue', 'Arial', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    font-size: 15px;
     line-height: 1.6;
-    pointer-events: none !important;
     
     /* Neutral Color Palette */
     --neutral-100: #f8fafc;
@@ -68,6 +63,18 @@
     --radius-full: 9999px;
 }
 
+/* Wrapper now acts only as a theme/state holder, NO layout interference */
+#actnow-chat-widget {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    z-index: 2147483647;
+    pointer-events: none;
+    /* Removed transform, top, right to prevent coordinate shifting */
+}
+
 /* Ensure interactive elements are clickable */
 #actnow-chat-widget .actnow-chat-button,
 #actnow-chat-widget .actnow-chat-container,
@@ -89,10 +96,11 @@
    FLOATING CHAT BUTTON - Glassmorphism Pill
    ============================================ */
 .actnow-chat-button {
-    position: absolute;
+    position: fixed; /* Changed from absolute to fixed */
     top: 50%;
     right: 8px;
     transform: translateY(-50%);
+    /* ... rest remains the same ... */
     width: 56px;
     height: 56px;
     background: var(--glass-white-heavy);
@@ -171,10 +179,11 @@
    CHAT CONTAINER - Soft Glass Card
    ============================================ */
 .actnow-chat-container {
-    position: absolute;
+    position: fixed; /* Changed from absolute to fixed */
     top: 50%;
     right: 76px;
     transform: translateY(-50%);
+    /* ... rest remains the same ... */
     width: 400px;
     height: min(650px, calc(100vh - 80px));
     max-height: calc(100vh - 60px);
@@ -211,7 +220,7 @@
 .actnow-chat-container.actnow-chat-open {
     display: flex !important;
     visibility: visible !important;
-    animation: actnow-float-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: actnow-float-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .actnow-chat-container.actnow-chat-closed {
@@ -222,11 +231,11 @@
 @keyframes actnow-float-in {
     from {
         opacity: 0;
-        transform: translateY(-50%) translateX(30px) scale(0.95);
+        transform: scale(0.95);
     }
     to {
         opacity: 1;
-        transform: translateY(-50%) translateX(0) scale(1);
+        transform: scale(1);
     }
 }
 
@@ -542,25 +551,29 @@
 
 /* Content - Tighter & Cleaner */
 .actnow-message-content {
-    padding: 12px 16px;
+    box-sizing: border-box; /* Ensure padding doesn't overflow width */
+    padding: 8px 12px; /* Reduced padding for cleaner look */
     border-radius: 12px;
-    line-height: 1.5;
-    font-size: 13.5px;
+    line-height: 1.6; /* More relaxed line height */
+    font-size: 15px; /* Larger font */
     overflow-wrap: break-word;
     word-break: break-word;
-    width: fit-content;
-    max-width: 90%;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Very subtle shadow */
+    width: 100%; /* Full width for assistant */
+    max-width: 100%;
+    box-shadow: none; /* Removed shadow */
 }
 
 /* User Message */
 .actnow-message-user .actnow-message-content {
     background: var(--neutral-100);
     color: var(--text-primary);
-    border: 1px solid var(--neutral-200);
-    border-top-right-radius: 4px; /* Slight distinct shape */
+    border: 1px solid var(--neutral-200); /* Keep slight border for user */
+    border-radius: 20px; /* Rounder user bubbles */
     align-self: flex-end;
     margin-left: auto;
+    width: fit-content;
+    max-width: 90%;
+    padding: 10px 16px;
 }
 
 /* Assistant Message */
@@ -568,8 +581,8 @@
     background: transparent;
     color: var(--text-primary);
     border: none;
-    /* padding removed to inherit global padding */
-    border-top-left-radius: 4px;
+    padding: 8px 12px; /* Increased padding as requested */
+    border-radius: 0;
     align-self: flex-start;
     margin-right: auto;
     box-shadow: none;
@@ -578,18 +591,18 @@
 /* Dark Theme Adjustments */
 [data-theme="dark"] .actnow-message-user .actnow-message-content {
     background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
 }
 
 [data-theme="dark"] .actnow-message-assistant .actnow-message-content {
     background: transparent;
-    color: var(--text-primary);
+    color: #ececf1; /* ChatGPT Dark Text */
 }
 
 /* Typography inside messages */
 .actnow-message-content p {
-    margin: 0 0 6px 0;
+    margin: 0 0 12px 0; /* Increased paragraph spacing */
 }
 
 .actnow-message-content p:last-child {
@@ -746,16 +759,18 @@
 /* Inline Code - GitHub Style */
 .actnow-inline-code {
     font-family: 'JetBrains Mono', 'Menlo', monospace;
-    font-size: 0.9em;
-    background: rgba(175, 184, 193, 0.2);
-    padding: 0.2em 0.4em;
+    font-size: 0.875em;
+    background: rgba(0, 0, 0, 0.05); /* Lighter bg */
+    padding: 2px 5px;
     border-radius: 6px;
     color: #24292f;
+    border: 1px solid rgba(0,0,0,0.05); /* Subtle border */
 }
 
 [data-theme="dark"] .actnow-inline-code {
-    background: rgba(110, 118, 129, 0.4);
+    background: rgba(255, 255, 255, 0.1);
     color: #e6edf3;
+    border-color: rgba(255,255,255,0.1);
 }
 
 /* 
@@ -1396,17 +1411,21 @@
     background: rgba(255,255,255,0.1);
 }
 
-/* ============================================
-   RESIZE HANDLES - Subtle
-   ============================================ */
+/* All resize handles styling */
 .actnow-resize-handle {
     position: absolute;
     background: transparent;
     z-index: 10;
-    transition: background 0.2s ease;
+    transition: all 0.2s ease;
 }
 
-/* Corner SE - Most visible */
+/* Make all handles slightly visible on hover */
+.actnow-resize-handle:hover {
+    background: linear-gradient(135deg, transparent 40%, rgba(148, 163, 184, 0.4) 40%);
+    opacity: 0.8;
+}
+
+/* Specific styling for SE handle (most visible) */
 .actnow-resize-handle-se {
     bottom: 0;
     right: 0;
@@ -1415,81 +1434,106 @@
     cursor: se-resize;
     background: linear-gradient(135deg, transparent 40%, var(--neutral-300) 40%);
     border-radius: 0 0 var(--radius-xl) 0;
-    opacity: 0.5;
+    opacity: 0.6; /* Visible by default */
 }
 
 .actnow-resize-handle-se:hover {
-    opacity: 0.8;
+    opacity: 1;
+    background: linear-gradient(135deg, transparent 40%, var(--neutral-400) 40%);
 }
 
-/* Other corners */
+/* Corners styling */
 .actnow-resize-handle-nw,
 .actnow-resize-handle-ne,
 .actnow-resize-handle-sw {
     width: 16px;
     height: 16px;
+    opacity: 0.6; /* Visible by default */
 }
 
-.actnow-resize-handle-nw { top: 0; left: 0; cursor: nw-resize; border-radius: var(--radius-xl) 0 0 0; }
-.actnow-resize-handle-ne { top: 0; right: 0; cursor: ne-resize; border-radius: 0 var(--radius-xl) 0 0; }
-.actnow-resize-handle-sw { bottom: 0; left: 0; cursor: sw-resize; border-radius: 0 0 0 var(--radius-xl); }
+.actnow-resize-handle-nw { 
+    top: 0; left: 0; cursor: nw-resize; border-radius: var(--radius-xl) 0 0 0;
+    background: linear-gradient(315deg, transparent 40%, var(--neutral-300) 40%);
+}
+.actnow-resize-handle-ne { 
+    top: 0; right: 0; cursor: ne-resize; border-radius: 0 var(--radius-xl) 0 0;
+    background: linear-gradient(225deg, transparent 40%, var(--neutral-300) 40%);
+}
+.actnow-resize-handle-sw { 
+    bottom: 0; left: 0; cursor: sw-resize; border-radius: 0 0 0 var(--radius-xl);
+    background: linear-gradient(45deg, transparent 40%, var(--neutral-300) 40%);
+}
 
-.actnow-resize-handle-nw:hover,
-.actnow-resize-handle-ne:hover,
+/* Make them brighter on hover */
+.actnow-resize-handle-nw:hover {
+    opacity: 1;
+    background: linear-gradient(315deg, transparent 40%, var(--neutral-400) 40%);
+}
+.actnow-resize-handle-ne:hover {
+    opacity: 1;
+    background: linear-gradient(225deg, transparent 40%, var(--neutral-400) 40%);
+}
 .actnow-resize-handle-sw:hover {
-    background: rgba(224, 195, 252, 0.3);
+    opacity: 1;
+    background: linear-gradient(45deg, transparent 40%, var(--neutral-400) 40%);
 }
 
-/* Edge handles */
+/* Edge handles styling */
 .actnow-resize-handle-n,
 .actnow-resize-handle-s {
     left: 50%;
-    width: 50px;
-    height: 6px;
+    width: 40px; /* Shorter for cleaner look */
+    height: 4px;
     transform: translateX(-50%);
     border-radius: var(--radius-full);
+    opacity: 0.4; /* Visible by default */
+    background: var(--neutral-300);
 }
 
-.actnow-resize-handle-n { top: 2px; cursor: ns-resize; }
-.actnow-resize-handle-s { bottom: 2px; cursor: ns-resize; }
+.actnow-resize-handle-n { top: 3px; cursor: ns-resize; }
+.actnow-resize-handle-s { bottom: 3px; cursor: ns-resize; }
 
 .actnow-resize-handle-w,
 .actnow-resize-handle-e {
     top: 50%;
-    width: 6px;
-    height: 50px;
+    width: 4px;
+    height: 40px; /* Shorter for cleaner look */
     transform: translateY(-50%);
     border-radius: var(--radius-full);
+    opacity: 0.4; /* Visible by default */
+    background: var(--neutral-300);
 }
 
-.actnow-resize-handle-w { left: 2px; cursor: ew-resize; }
-.actnow-resize-handle-e { right: 2px; cursor: ew-resize; }
+.actnow-resize-handle-w { left: 3px; cursor: ew-resize; }
+.actnow-resize-handle-e { right: 3px; cursor: ew-resize; }
 
+/* Edge handles hover state */
 .actnow-resize-handle-n:hover,
 .actnow-resize-handle-s:hover,
 .actnow-resize-handle-w:hover,
 .actnow-resize-handle-e:hover {
-    background: var(--neutral-300);
-    opacity: 0.5;
+    background: var(--neutral-400);
+    opacity: 1;
 }
 
 /* ============================================
-   STREAMING CURSOR
+   STREAMING CURSOR (Optimized)
    ============================================ */
 .actnow-streaming-cursor {
     display: inline-block;
-    width: 2px;
-    height: 1.2em;
-    background: var(--neutral-300);
-    animation: actnow-cursor-blink 1s infinite;
+    width: 8px;
+    height: 16px; /* Vertical bar style like ChatGPT */
+    background: var(--text-primary);
+    border-radius: 1px;
+    animation: actnow-cursor-fade 0.8s infinite;
     vertical-align: text-bottom;
     margin-left: 2px;
-    border-radius: 1px;
+    opacity: 1;
 }
 
-@keyframes actnow-cursor-blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
+@keyframes actnow-cursor-fade {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
 }
 
 /* ============================================

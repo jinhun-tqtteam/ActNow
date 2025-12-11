@@ -49,7 +49,7 @@ chrome.runtime.onConnect.addListener((port) => {
             if (msg.action === 'chat_completion') {
                 console.log('✅ Chat completion action detected');
                 try {
-                    const { apiKey, model, messages, maxTokens, temperature } = msg.data;
+                    const { provider, endpoint, apiKey, model, messages, maxTokens, temperature } = msg.data;
 
                     if (!apiKey) {
                         port.postMessage({ error: 'API key is missing' });
@@ -66,16 +66,26 @@ chrome.runtime.onConnect.addListener((port) => {
                         return;
                     }
 
-                    console.log('Background: Calling OpenRouter API with model:', model);
+                    // Default to OpenRouter if not specified (legacy support)
+                    const isOpenRouter = !provider || provider === 'openrouter';
+                    const targetUrl = endpoint || 'https://openrouter.ai/api/v1/chat/completions';
+
+                    console.log(`Background: Calling ${provider || 'openrouter'} API at ${targetUrl} with model: ${model}`);
                     
-                    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    const headers = {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    };
+
+                    // Add OpenRouter specific headers only if using OpenRouter
+                    if (isOpenRouter) {
+                        headers['HTTP-Referer'] = 'https://actnow.ai';
+                        headers['X-Title'] = 'ActNow AI Assistant';
+                    }
+
+                    const response = await fetch(targetUrl, {
                         method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json',
-                            'HTTP-Referer': 'https://actnow.ai',
-                            'X-Title': 'ActNow AI Assistant'
-                        },
+                        headers: headers,
                         body: JSON.stringify({
                             model: model,
                             messages: messages,
