@@ -1,59 +1,36 @@
-(function() {
+(function () {
     'use strict';
 
-    console.log('🎬 ActNow content script loaded');
+    console.log('ActNow content script loaded');
 
     // Prevent multiple injections
     if (document.getElementById('actnow-extension-host')) {
-        console.warn('⚠️ ActNow instance already exists, skipping initialization');
+        console.warn('ActNow instance already exists, skipping initialization');
         return;
     }
 
-    console.log('✅ No existing instance, proceeding with initialization');
+    // Access global instances loaded by previous content scripts
+    const { ActNowState, ActNowAPI, ActNowStorage, ActNowConstants, ActNowMarkdown } = window;
 
-    const DEFAULT_MODEL = 'anthropic/claude-3.5-sonnet';
-    const MAX_MESSAGE_QUEUE_SIZE = 5;
+    // Alias to match existing code
+    const stateManager = ActNowState;
+    const apiManager = ActNowAPI;
+    const storageManager = ActNowStorage;
+
+    const CONFIG = {
+        DEFAULT_CHAT_WIDTH: 380,
+        DEFAULT_CHAT_HEIGHT: 600,
+        MAX_MESSAGE_QUEUE: 5,
+        DEFAULT_MODEL: 'anthropic/claude-3.5-sonnet',
+        Z_INDEX: 2147483647
+    };
 
     class ActNowController {
         constructor() {
             this.shadowRoot = null;
             this.hostElement = null;
-            this.port = null;
-            
-            this.state = {
-                isOpen: false,
-                isTyping: false,
-                messages: [],
-                provider: 'openrouter',
-                apiKey: null,
-                openaiApiKey: null,
-                openaiBaseUrl: null,
-                model: null,
-                theme: 'light',
-                maxTokens: 1000,
-                temperature: 0.7,
-                conversationId: null,
-                messageQueue: [],
-                isProcessingQueue: false,
-                streamingMessageId: null,
-                isStreaming: false,
-                isResizing: false,
-                isDragging: false,
-                // Streaming Buffer State
-                streamTargetContent: '', // Full content received from API
-                streamDisplayContent: '', // Content currently shown (typewriter effect)
-                chatSize: { width: 380, height: 600 },
-                chatPosition: { x: null, y: null },
-                resizeStart: { x: 0, y: 0, width: 0, height: 0 },
-                dragStart: { x: 0, y: 0 },
-                // Conversation Management
-                conversationList: [],
-                isSidebarOpen: false,
-                // Selected Content
-                selectedText: null,
-                // Custom Chips
-                customChips: []
-            };
+
+            this.state = stateManager;
 
             this.boundResizeMove = this.handleResizeMove.bind(this);
             this.boundResizeEnd = this.handleResizeEnd.bind(this);
@@ -76,10 +53,10 @@
             // Render Widget AFTER state is loaded
             this.renderWidget();
             console.log('✅ Widget rendered');
-            
+
             // Apply size and position now that widget exists
             this.applyChatSizeAndPosition();
-            
+
             // Initial Render of dynamic content (since initializeState ran before DOM was ready)
             this.renderSidebar();
             this.renderMessages();
@@ -100,7 +77,7 @@
             this.hostElement.style.all = 'initial';
             // Ensure z-index is high enough for the host container
             this.hostElement.style.position = 'fixed';
-            this.hostElement.style.zIndex = '2147483647';
+            this.hostElement.style.zIndex = String(CONFIG.Z_INDEX);
             this.hostElement.style.bottom = '0';
             this.hostElement.style.right = '0';
             this.hostElement.style.width = '0';
@@ -110,7 +87,7 @@
             document.body.appendChild(this.hostElement);
 
             this.shadowRoot = this.hostElement.attachShadow({ mode: 'open' });
-            
+
             // Inject Styles
             const styleLink = document.createElement('link');
             styleLink.rel = 'stylesheet';
@@ -274,7 +251,7 @@
                 </div>
             `;
             this.shadowRoot.appendChild(container);
-            
+
             // Setup DOM Events
             this.setupDOMEvents();
         }
@@ -287,7 +264,7 @@
             const chatButton = get('actnow-chat-button');
             const minimizeBtn = get('actnow-minimize-btn');
             const settingsBtn = get('actnow-settings-btn');
-            
+
             if (chatButton) chatButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -306,7 +283,7 @@
                 e.stopPropagation();
                 this.toggleChat(false);
             });
-            
+
             if (settingsBtn) settingsBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -324,7 +301,7 @@
 
             // Model Selector - Searchable Dropdown
             this.setupModelDropdown();
-            
+
             // Load models on init
             console.log('🔄 Loading models...', { hasApiKey: !!this.state.apiKey });
             this.loadModelsToDropdown();
@@ -369,7 +346,7 @@
             resizeHandles.forEach(handle => {
                 handle.addEventListener('mousedown', (e) => this.handleResizeStart(e));
             });
-            
+
             // Dragging (Header)
             const header = get('actnow-chat-header');
             if (header) {
@@ -387,7 +364,7 @@
                         const msg = chip.getAttribute('data-message');
                         // Legacy support for welcome chips
                         if (msg) {
-                             const input = get('actnow-message-input');
+                            const input = get('actnow-message-input');
                             if (input) {
                                 input.value = msg;
                                 input.dispatchEvent(new Event('input'));
@@ -398,7 +375,7 @@
                     }
                 });
             }
-            
+
             // New Chips Bar Listener
             const chipsBar = get('actnow-chips-bar');
             if (chipsBar) {
@@ -437,10 +414,10 @@
             // Listen for selection changes on the main document
             document.addEventListener('mouseup', this.boundHandleSelection);
             document.addEventListener('keyup', (e) => {
-                 if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Meta') {
-                     // Check selection when modifier keys are released
-                     this.handleSelection();
-                 }
+                if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Meta') {
+                    // Check selection when modifier keys are released
+                    this.handleSelection();
+                }
             });
 
             // Delegate Click for Copy Code Buttons
@@ -456,7 +433,7 @@
                             textarea.value = this.decodeHtml(code);
                             document.body.appendChild(textarea);
                             textarea.select();
-                            
+
                             try {
                                 document.execCommand('copy');
                                 const originalText = btn.innerHTML;
@@ -472,7 +449,7 @@
                             } catch (err) {
                                 console.error('Failed to copy', err);
                             }
-                            
+
                             document.body.removeChild(textarea);
                         }
                     }
@@ -493,7 +470,7 @@
             }
             // Or if the mouseup target was inside our host
             if (window.event && this.hostElement && this.hostElement.contains(window.event.target)) {
-                 return;
+                return;
             }
 
             const selection = window.getSelection().toString().trim();
@@ -512,14 +489,14 @@
         updateContextUI() {
             const preview = this.shadowRoot.getElementById('actnow-context-preview');
             const textEl = this.shadowRoot.getElementById('actnow-context-text');
-            
+
             if (!preview || !textEl) return;
 
             if (this.state.selectedText) {
                 // Format: "Word1 Word2..."
                 const words = this.state.selectedText.split(/\s+/);
                 const display = words.slice(0, 2).join(' ') + (words.length > 2 ? '...' : '');
-                
+
                 textEl.textContent = `Selected: "${display}"`;
                 textEl.title = this.state.selectedText; // Tooltip shows full text
                 preview.classList.add('visible');
@@ -545,20 +522,20 @@
             this.state.apiKey = settings.apiKey || null; // OpenRouter Key
             this.state.openaiApiKey = settings.openaiApiKey || null;
             this.state.openaiBaseUrl = settings.openaiBaseUrl || 'https://api.openai.com/v1';
-            
+
             this.state.model = settings.model || DEFAULT_MODEL;
             this.state.theme = settings.theme || 'light';
             this.state.maxTokens = settings.maxTokens || 1000;
             this.state.temperature = settings.temperature || 0.7;
             this.state.customChips = settings.customChips || [];
-            
+
             // ISOLATION LOGIC:
             // 1. Try to get ID from sessionStorage (this specific tab's history)
             // 2. If not found, generate a NEW ID
             // 3. We do NOT sync this ID to chrome.storage.sync anymore to prevent hijacking other tabs
-            
+
             let sessionConvId = sessionStorage.getItem('actnow_active_conversation_id');
-            
+
             if (sessionConvId) {
                 console.log('🔄 Restored conversation ID from session:', sessionConvId);
                 this.state.conversationId = sessionConvId;
@@ -577,7 +554,7 @@
             if (!settings.model) {
                 await chrome.storage.sync.set({ model: this.state.model });
             }
-            
+
             if (settings.chatSize) {
                 this.state.chatSize = settings.chatSize;
             }
@@ -585,25 +562,25 @@
             if (settings.chatPosition) {
                 this.state.chatPosition = settings.chatPosition;
             }
-            
+
             // Container not ready yet, so we skip applying here
             // this.applyChatSizeAndPosition();
 
             this.applyTheme(this.state.theme);
-            
+
             // Load Conversation List
             await this.loadConversationList();
-            
+
             // If we are starting a NEW conversation (not in list), let's pre-register it in the list
             // with the current URL so it appears immediately
             const exists = this.state.conversationList.find(c => c.id === this.state.conversationId);
             if (!exists) {
-                 await this.saveConversationList([{
-                     id: this.state.conversationId,
-                     title: 'New Conversation',
-                     timestamp: Date.now(),
-                     url: window.location.hostname
-                 }, ...this.state.conversationList]); // Keep existing ones
+                await this.saveConversationList([{
+                    id: this.state.conversationId,
+                    title: 'New Conversation',
+                    timestamp: Date.now(),
+                    url: window.location.hostname
+                }, ...this.state.conversationList]); // Keep existing ones
             }
 
             await this.loadConversation();
@@ -615,30 +592,30 @@
         renderChips() {
             const container = this.shadowRoot.getElementById('actnow-chips-bar');
             if (!container) return;
-            
+
             const chips = this.state.customChips;
             if (!chips || chips.length === 0) {
                 // If no custom chips, show defaults or hide
-                 // For now, let's use the defaults if empty, similar to options page
-                 const defaults = [
+                // For now, let's use the defaults if empty, similar to options page
+                const defaults = [
                     { label: 'Summarize', prompt: 'Summarize this text: ' },
                     { label: 'Explain', prompt: 'Explain this clearly: ' },
                     { label: 'Fix Grammar', prompt: 'Fix grammar and improve flow: ' }
                 ];
-                container.innerHTML = defaults.map(chip => 
+                container.innerHTML = defaults.map(chip =>
                     `<button class="actnow-chip" data-prompt="${this.escapeHtml(chip.prompt)}">${this.escapeHtml(chip.label)}</button>`
                 ).join('');
             } else {
-                container.innerHTML = chips.map(chip => 
+                container.innerHTML = chips.map(chip =>
                     `<button class="actnow-chip" data-prompt="${this.escapeHtml(chip.prompt)}">${this.escapeHtml(chip.label)}</button>`
                 ).join('');
             }
         }
-        
+
         escapeHtml(text) {
-             const div = document.createElement('div');
-             div.textContent = text;
-             return div.innerHTML;
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         setupRuntimeListeners() {
@@ -664,7 +641,7 @@
                     if (changes.apiKey) this.state.apiKey = changes.apiKey.newValue;
                     if (changes.openaiApiKey) this.state.openaiApiKey = changes.openaiApiKey.newValue;
                     if (changes.openaiBaseUrl) this.state.openaiBaseUrl = changes.openaiBaseUrl.newValue;
-                    
+
                     if (changes.model) this.state.model = changes.model.newValue;
                     if (changes.theme) {
                         this.state.theme = changes.theme.newValue;
@@ -676,7 +653,7 @@
                         this.state.customChips = changes.customChips.newValue || [];
                         this.renderChips();
                     }
-                    
+
                     // REMOVED: Sync conversation switch logic
                     // We want tabs to be independent unless user manually switches via sidebar
 
@@ -695,8 +672,8 @@
                         console.log('🔄 Sync: Messages updated for current conversation');
                         // Only update if not currently streaming to avoid conflict
                         if (!this.state.isStreaming) {
-                             this.state.messages = changes[currentConvKey].newValue || [];
-                             this.renderMessages();
+                            this.state.messages = changes[currentConvKey].newValue || [];
+                            this.renderMessages();
                         }
                     }
                 }
@@ -708,7 +685,7 @@
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             const badge = this.shadowRoot.getElementById('actnow-notification-badge');
             const chatButton = this.shadowRoot.getElementById('actnow-chat-button');
-            
+
             if (!container) return;
 
             const isCurrentlyOpen = container.classList.contains('actnow-chat-open');
@@ -721,7 +698,7 @@
                 this.state.isOpen = true;
                 if (badge) badge.style.display = 'none';
                 if (chatButton) chatButton.setAttribute('aria-expanded', 'true');
-                
+
                 setTimeout(() => {
                     const input = this.shadowRoot.getElementById('actnow-message-input');
                     if (input) input.focus();
@@ -744,7 +721,7 @@
             }
 
             const content = input.value.trim();
-            
+
             let currentKey = this.state.apiKey;
             if (this.state.provider === 'openai') {
                 currentKey = this.state.openaiApiKey;
@@ -789,12 +766,12 @@
             }
 
             console.log('✅ All checks passed, processing message...');
-            
+
             // Build Final Message with Context
             let finalContent = content;
             if (this.state.selectedText) {
                 finalContent = `Context:\n"""\n${this.state.selectedText}\n"""\n\nQuestion: ${content}`;
-                
+
                 // Clear selection UI after sending
                 this.clearSelection();
             }
@@ -818,7 +795,7 @@
             this.state.messages.push(userMsg);
             console.log('✅ User message added to state');
             this.renderMessages();
-            
+
             // Setup Assistant Message
             const assistantMsg = {
                 role: 'assistant',
@@ -829,14 +806,14 @@
             this.state.messages.push(assistantMsg);
             this.state.streamingMessageId = assistantMsg.id;
             this.state.isStreaming = true;
-            
+
             // Reset Buffers
             this.state.streamTargetContent = '';
             this.state.streamDisplayContent = '';
-            
+
             console.log('✅ Assistant message placeholder created');
             this.renderMessages();
-            
+
             // Start the Typewriter Loop immediately
             this.startTypeWriterLoop(assistantMsg.id);
 
@@ -853,12 +830,12 @@
                 console.log('📡 Connecting to background script...');
                 const port = chrome.runtime.connect({ name: 'actnow-stream' });
                 console.log('✅ Port connected');
-                
+
                 // Setup listeners BEFORE sending message to avoid race condition
                 const streamPromise = new Promise((resolve, reject) => {
                     let hasEnded = false;
                     let pendingRender = false;
-                    
+
                     // Timeout after 30 seconds
                     const timeout = setTimeout(() => {
                         if (!hasEnded) {
@@ -867,13 +844,13 @@
                             reject(new Error('Request timeout - no response from background script. Background script may not be running.'));
                         }
                     }, 30000);
-                    
+
                     let firstChunkReceived = false;
-                    
+
                     port.onMessage.addListener((msg) => {
                         // console.log('📨 Received message from background:', msg); // Reduce log noise
                         if (hasEnded) return;
-                        
+
                         if (msg.error) {
                             hasEnded = true;
                             clearTimeout(timeout);
@@ -885,33 +862,33 @@
                                 firstChunkReceived = true;
                                 console.log('✅ First chunk received');
                             }
-                            
+
                             // Append chunk to TARGET buffer only
                             // The Typewriter Loop will handle the rendering
                             this.state.streamTargetContent += msg.chunk;
-                            
+
                         } else if (msg.done) {
                             hasEnded = true;
                             clearTimeout(timeout);
-                            
+
                             // Ensure final render happens
                             const currentMsg = this.state.messages.find(m => m.id === assistantMsg.id);
                             if (currentMsg) {
                                 this.updateStreamingMessageUI(currentMsg);
                             }
-                            
+
                             console.log('✅ Stream completed');
                             this.state.isApiDone = true; // Signal typewriter loop
                             resolve();
                         }
                     });
-                    
+
                     port.onDisconnect.addListener(() => {
                         console.log('🔌 Port disconnected');
                         if (hasEnded) return;
                         hasEnded = true;
                         clearTimeout(timeout);
-                        
+
                         if (chrome.runtime.lastError) {
                             console.error('Port disconnect error:', chrome.runtime.lastError);
                             reject(new Error(chrome.runtime.lastError.message || 'Connection lost'));
@@ -921,14 +898,14 @@
                         }
                     });
                 });
-                
+
                 // Now send the message after listeners are ready
                 console.log('📤 Sending chat request with model:', this.state.model);
-                
+
                 // Determine active key
                 let activeKey = this.state.apiKey;
                 let activeUrl = 'https://openrouter.ai/api/v1/chat/completions';
-                
+
                 if (this.state.provider === 'openai') {
                     activeKey = this.state.openaiApiKey;
                     // Ensure base URL ends with /chat/completions
@@ -958,7 +935,7 @@
                     model: messagePayload.data.model,
                     hasApiKey: !!messagePayload.data.apiKey
                 });
-                
+
                 try {
                     port.postMessage(messagePayload);
                     console.log('✅ Message sent to background script, waiting for response...');
@@ -1016,15 +993,15 @@
                     // Append chars
                     const nextChars = target.substr(current.length, step);
                     this.state.streamDisplayContent += nextChars;
-                    
+
                     // Update Message Object & UI
                     const msg = this.state.messages.find(m => m.id === msgId);
                     if (msg) {
                         msg.content = this.state.streamDisplayContent;
                         this.updateStreamingMessageUI(msg);
                     }
-                } 
-                
+                }
+
                 // Check for completion
                 if (this.state.isApiDone && this.state.streamDisplayContent.length >= this.state.streamTargetContent.length) {
                     console.log('🏁 Typewriter finished');
@@ -1035,7 +1012,7 @@
                     this.renderMessages(); // Final clean render
                     this.state.isProcessingQueue = false;
                     this.updateSendButtonState();
-                    
+
                     // Process Queue
                     if (this.state.messageQueue.length > 0) {
                         const next = this.state.messageQueue.shift();
@@ -1046,36 +1023,36 @@
 
                 requestAnimationFrame(loop);
             };
-            
+
             this.state.isApiDone = false; // Reset flag
             loop();
         }
 
         updateStreamingMessageUI(msg) {
-             const container = this.shadowRoot.getElementById('actnow-messages');
-             
-             // User requested to DISABLE auto-scrolling completely during stream
-             // to prevent reading disruption.
-             // const threshold = 10;
-             // const isAtBottom = container ? (container.scrollHeight - container.scrollTop - container.clientHeight <= threshold) : true;
+            const container = this.shadowRoot.getElementById('actnow-messages');
 
-             const msgEl = this.shadowRoot.querySelector(`[data-message-id="${msg.id}"]`);
-             if (msgEl) {
-                 const contentEl = msgEl.querySelector('.actnow-message-content');
-                 if (contentEl) {
-                     // Update content with streaming cursor
-                     contentEl.innerHTML = this.formatMessage(msg.content); // Cursor removed per user request
-                     
-                     // Auto-scroll disabled per user request
-                     // if (isAtBottom && container) {
-                     //    container.scrollTop = container.scrollHeight;
-                     // }
-                 }
-             } else {
-                 // If element not found, re-render all messages
-                 console.warn('⚠️ Streaming message element not found, re-rendering...');
-                 this.renderMessages();
-             }
+            // User requested to DISABLE auto-scrolling completely during stream
+            // to prevent reading disruption.
+            // const threshold = 10;
+            // const isAtBottom = container ? (container.scrollHeight - container.scrollTop - container.clientHeight <= threshold) : true;
+
+            const msgEl = this.shadowRoot.querySelector(`[data-message-id="${msg.id}"]`);
+            if (msgEl) {
+                const contentEl = msgEl.querySelector('.actnow-message-content');
+                if (contentEl) {
+                    // Update content with streaming cursor
+                    contentEl.innerHTML = this.formatMessage(msg.content); // Cursor removed per user request
+
+                    // Auto-scroll disabled per user request
+                    // if (isAtBottom && container) {
+                    //    container.scrollTop = container.scrollHeight;
+                    // }
+                }
+            } else {
+                // If element not found, re-render all messages
+                console.warn('⚠️ Streaming message element not found, re-rendering...');
+                this.renderMessages();
+            }
         }
 
         showTypingIndicator() {
@@ -1107,8 +1084,8 @@
             const historyHTML = this.state.messages.map(msg => {
                 let contentHTML = '';
                 if (msg.role === 'assistant' && msg.id === this.state.streamingMessageId && !msg.content) {
-                     // Inline loading indicator
-                     contentHTML = `
+                    // Inline loading indicator
+                    contentHTML = `
                         <div class="actnow-inline-loading">
                             <span class="actnow-loading-dot"></span>
                             <span class="actnow-loading-dot"></span>
@@ -1116,11 +1093,11 @@
                         </div>
                      `;
                 } else {
-                     contentHTML = this.formatMessage(msg.content);
-                     // Cursor removed per user request
-                     // if (msg.id === this.state.streamingMessageId) {
-                     //    contentHTML += '<span class="actnow-streaming-cursor"></span>';
-                     // }
+                    contentHTML = this.formatMessage(msg.content);
+                    // Cursor removed per user request
+                    // if (msg.id === this.state.streamingMessageId) {
+                    //    contentHTML += '<span class="actnow-streaming-cursor"></span>';
+                    // }
                 }
 
                 const isUser = msg.role === 'user';
@@ -1133,7 +1110,7 @@
                     <div class="actnow-message-footer-row">
                         <div class="actnow-message-avatar">${avatarIcon}</div>
                         <div class="actnow-message-time">
-                            ${new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            ${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                     </div>
                 </div>
@@ -1155,11 +1132,11 @@
                 </div>
                 `;
             }).join('');
-            
+
             // Render Clear Queue Button (if queue exists)
             let clearQueueHTML = '';
             if (this.state.messageQueue.length > 0) {
-                 clearQueueHTML = `
+                clearQueueHTML = `
                     <div class="actnow-queue-actions">
                         <button id="actnow-clear-queue-btn" class="actnow-btn-small">
                             <span style="font-size: 14px;">⛔</span> Stop & Clear Queue (${this.state.messageQueue.length})
@@ -1169,12 +1146,12 @@
             }
 
             container.innerHTML = historyHTML;
-            
+
             // Render Queue into separate container
             const queueContainer = this.shadowRoot.getElementById('actnow-queue-container');
             if (queueContainer) {
                 queueContainer.innerHTML = queueHTML + clearQueueHTML;
-                
+
                 // Attach Clear Queue Listener
                 const clearBtn = queueContainer.querySelector('#actnow-clear-queue-btn');
                 if (clearBtn) {
@@ -1184,10 +1161,10 @@
 
             this.scrollToBottom();
         }
-        
+
         clearQueue() {
             if (this.state.messageQueue.length === 0) return;
-            
+
             if (confirm('Cancel all pending messages?')) {
                 console.log('🛑 Clearing message queue:', this.state.messageQueue.length);
                 this.state.messageQueue = [];
@@ -1224,33 +1201,33 @@
         }
 
         async saveConversation() {
-             try {
+            try {
                 await chrome.storage.local.set({
                     ['conversation_' + this.state.conversationId]: this.state.messages
                 });
-             } catch (e) {
+            } catch (e) {
                 console.warn('⚠️ Failed to save conversation (likely context invalidated):', e);
                 return;
-             }
+            }
 
-             // Update title in list but DO NOT update timestamp or reorder
-             const index = this.state.conversationList.findIndex(c => c.id === this.state.conversationId);
-             if (index !== -1) {
-                 // Removed timestamp update to keep "Creation Time" sorting
-                 // this.state.conversationList[index].timestamp = Date.now();
-                 
-                 // Update title if it's "New Conversation" and we have messages
-                 if (this.state.conversationList[index].title === 'New Conversation' && this.state.messages.length > 0) {
-                     const firstUserMsg = this.state.messages.find(m => m.role === 'user');
-                     if (firstUserMsg) {
-                         const title = firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '');
-                         this.state.conversationList[index].title = title;
-                         await this.saveConversationList(this.state.conversationList);
-                     }
-                 }
-                 
-                 // Removed reordering logic (splice/unshift)
-             }
+            // Update title in list but DO NOT update timestamp or reorder
+            const index = this.state.conversationList.findIndex(c => c.id === this.state.conversationId);
+            if (index !== -1) {
+                // Removed timestamp update to keep "Creation Time" sorting
+                // this.state.conversationList[index].timestamp = Date.now();
+
+                // Update title if it's "New Conversation" and we have messages
+                if (this.state.conversationList[index].title === 'New Conversation' && this.state.messages.length > 0) {
+                    const firstUserMsg = this.state.messages.find(m => m.role === 'user');
+                    if (firstUserMsg) {
+                        const title = firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '');
+                        this.state.conversationList[index].title = title;
+                        await this.saveConversationList(this.state.conversationList);
+                    }
+                }
+
+                // Removed reordering logic (splice/unshift)
+            }
         }
 
         async loadConversation() {
@@ -1264,10 +1241,10 @@
         async loadConversationList() {
             const data = await chrome.storage.local.get('conversation_list');
             this.state.conversationList = data.conversation_list || [];
-            
+
             // Sort by timestamp descending (Newest Created First)
             this.state.conversationList.sort((a, b) => b.timestamp - a.timestamp);
-            
+
             this.renderSidebar();
         }
 
@@ -1293,17 +1270,17 @@
             this.state.conversationId = newId;
             // Update session storage
             sessionStorage.setItem('actnow_active_conversation_id', newId);
-            
+
             this.state.messages = [];
-            
+
             // Add to list
             this.state.conversationList.unshift(newConv);
-            
+
             // Save everything
             await this.saveConversationList(this.state.conversationList);
             // Don't sync global ID anymore
             // await chrome.storage.sync.set({ conversationId: newId });
-            
+
             // Render
             this.renderMessages();
             this.toggleSidebar(false); // Close sidebar on mobile/small screens or just for UX
@@ -1353,7 +1330,7 @@
 
             // Load new
             await this.loadConversation();
-            
+
             // Close sidebar
             if (window.innerWidth < 600) {
                 this.toggleSidebar(false);
@@ -1409,7 +1386,7 @@
                 btn.addEventListener('click', (e) => this.deleteConversation(btn.getAttribute('data-id'), e));
             });
         }
-        
+
         // ==========================================
         // DRAG & RESIZE LOGIC (IMPROVED)
         // ==========================================
@@ -1417,17 +1394,17 @@
         handleDragStart(e) {
             // Only allow dragging from header, ignore if clicked on buttons
             if (e.target.closest('button') || e.target.closest('.actnow-icon-btn-modern')) return;
-            
+
             e.preventDefault();
-            
+
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             if (!container) return;
 
             this.state.isDragging = true;
-            
+
             // If we haven't positioned it yet (using default CSS), we need to get current rect
             const rect = container.getBoundingClientRect();
-            
+
             // If this is the first drag, or if we were in default mode
             if (this.state.chatPosition.x === null) {
                 this.state.chatPosition = {
@@ -1435,7 +1412,7 @@
                     y: rect.top
                 };
             }
-            
+
             this.state.dragStart = {
                 startX: e.clientX,
                 startY: e.clientY,
@@ -1448,7 +1425,7 @@
 
             document.addEventListener('mousemove', this.boundDragMove);
             document.addEventListener('mouseup', this.boundDragEnd);
-            
+
             container.style.transition = 'none'; // Disable transition for smooth drag
             container.style.cursor = 'grabbing';
             console.log('🖱️ Drag started');
@@ -1456,18 +1433,18 @@
 
         handleDragMove(e) {
             if (!this.state.isDragging) return;
-            
+
             const deltaX = e.clientX - this.state.dragStart.startX;
             const deltaY = e.clientY - this.state.dragStart.startY;
-            
+
             let newX = this.state.dragStart.initialLeft + deltaX;
             let newY = this.state.dragStart.initialTop + deltaY;
-            
+
             // Viewport Constraints
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             const width = container ? container.offsetWidth : 400;
             const height = container ? container.offsetHeight : 600;
-            
+
             // Keep at least 20px visible
             const minVisible = 20;
             const maxX = window.innerWidth - minVisible;
@@ -1485,17 +1462,17 @@
 
         handleDragEnd() {
             if (!this.state.isDragging) return;
-            
+
             this.state.isDragging = false;
             document.removeEventListener('mousemove', this.boundDragMove);
             document.removeEventListener('mouseup', this.boundDragEnd);
-            
+
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             if (container) {
                 container.style.cursor = '';
                 container.style.transition = '';
             }
-            
+
             // Save position
             chrome.storage.sync.set({ chatPosition: this.state.chatPosition });
             console.log('💾 Position saved:', this.state.chatPosition);
@@ -1504,12 +1481,12 @@
         handleResizeStart(e) {
             e.preventDefault();
             e.stopPropagation();
-            
+
             this.state.isResizing = true;
-            
+
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             const rect = container.getBoundingClientRect();
-            
+
             // If starting a resize and we are in default position, snap to absolute coords first
             if (this.state.chatPosition.x === null) {
                 this.state.chatPosition = { x: rect.left, y: rect.top };
@@ -1525,24 +1502,24 @@
                 top: this.state.chatPosition.y,  // Use stored position
                 type: e.target.getAttribute('data-resize')
             };
-            
+
             document.addEventListener('mousemove', this.boundResizeMove);
             document.addEventListener('mouseup', this.boundResizeEnd);
-            
+
             container.style.transition = 'none';
         }
 
         handleResizeMove(e) {
             if (!this.state.isResizing) return;
-            
+
             const deltaX = e.clientX - this.state.resizeStart.x;
             const deltaY = e.clientY - this.state.resizeStart.y;
-            
+
             let newW = this.state.resizeStart.width;
             let newH = this.state.resizeStart.height;
             let newX = this.state.resizeStart.left;
             let newY = this.state.resizeStart.top;
-            
+
             const type = this.state.resizeStart.type;
 
             // Handle width changes
@@ -1552,7 +1529,7 @@
                 newW = this.state.resizeStart.width - deltaX;
                 newX = this.state.resizeStart.left + deltaX;
             }
-            
+
             // Handle height changes
             if (type.includes('s')) {
                 newH = this.state.resizeStart.height + deltaY;
@@ -1566,7 +1543,7 @@
             const minH = 400;
             const maxW = window.innerWidth - 40;
             const maxH = window.innerHeight - 40;
-            
+
             // Apply constraints (adjust position if resizing from left/top)
             if (newW < minW) {
                 if (type.includes('w')) newX = this.state.resizeStart.left + (this.state.resizeStart.width - minW);
@@ -1575,7 +1552,7 @@
                 if (type.includes('w')) newX = this.state.resizeStart.left + (this.state.resizeStart.width - maxW); // Corrected logic
                 newW = maxW;
             }
-            
+
             if (newH < minH) {
                 if (type.includes('n')) newY = this.state.resizeStart.top + (this.state.resizeStart.height - minH);
                 newH = minH;
@@ -1589,22 +1566,22 @@
             if (newX !== this.state.resizeStart.left || newY !== this.state.resizeStart.top) {
                 this.state.chatPosition = { x: newX, y: newY };
             }
-            
+
             this.applyChatSizeAndPosition();
         }
 
         handleResizeEnd() {
             if (!this.state.isResizing) return;
-            
+
             this.state.isResizing = false;
             document.removeEventListener('mousemove', this.boundResizeMove);
             document.removeEventListener('mouseup', this.boundResizeEnd);
-            
+
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             if (container) container.style.transition = '';
-            
+
             // Save size and position
-            chrome.storage.sync.set({ 
+            chrome.storage.sync.set({
                 chatSize: this.state.chatSize,
                 chatPosition: this.state.chatPosition
             });
@@ -1614,11 +1591,11 @@
         applyChatSizeAndPosition() {
             const container = this.shadowRoot.getElementById('actnow-chat-container');
             if (!container) return;
-            
+
             // 1. Apply Size
             container.style.width = this.state.chatSize.width + 'px';
             container.style.height = this.state.chatSize.height + 'px';
-            
+
             // 2. Apply Position
             // If we have a stored custom position, use it (Fixed Positioning)
             if (this.state.chatPosition.x !== null && this.state.chatPosition.y !== null) {
@@ -1626,12 +1603,12 @@
                 const minVisible = 40;
                 let safeX = this.state.chatPosition.x;
                 let safeY = this.state.chatPosition.y;
-                
+
                 if (safeX > window.innerWidth - minVisible) safeX = window.innerWidth - 380;
                 if (safeX < -340) safeX = 20; // Reset if too far left
                 if (safeY > window.innerHeight - minVisible) safeY = window.innerHeight - 500;
                 if (safeY < 0) safeY = 20;
-                
+
                 // Reset to default if extremely weird values (e.g. from previous buggy state)
                 if (isNaN(safeX) || isNaN(safeY)) {
                     console.warn('⚠️ Invalid position detected, resetting to default');
@@ -1671,12 +1648,12 @@
             const menu = this.shadowRoot.getElementById('actnow-model-menu');
             const search = this.shadowRoot.getElementById('actnow-model-search');
             const dropdown = this.shadowRoot.getElementById('actnow-model-dropdown');
-            
+
             if (!trigger || !menu || !search) {
                 console.error('❌ Model dropdown elements not found');
                 return;
             }
-            
+
             // Toggle dropdown
             trigger.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -1691,62 +1668,62 @@
                     setTimeout(() => search.focus(), 50);
                 }
             });
-            
+
             // Search filter
             search.addEventListener('input', (e) => {
                 this.filterModels(e.target.value);
             });
-            
+
             // Prevent closing when clicking inside menu
             menu.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
-            
+
             // Close on outside click
             document.addEventListener('click', () => {
                 this.closeModelDropdown();
             });
-            
+
             // Close on escape
             search.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     this.closeModelDropdown();
                 }
             });
-            
+
             console.log('✅ Model dropdown setup complete');
         }
-        
+
         closeModelDropdown() {
             const dropdown = this.shadowRoot.getElementById('actnow-model-dropdown');
             if (dropdown) {
                 dropdown.classList.remove('open');
             }
         }
-        
+
         filterModels(query) {
             const list = this.shadowRoot.getElementById('actnow-model-list');
             if (!list || !this.state.modelsList) return;
-            
-            const filtered = query 
-                ? this.state.modelsList.filter(m => 
+
+            const filtered = query
+                ? this.state.modelsList.filter(m =>
                     m.name.toLowerCase().includes(query.toLowerCase()) ||
                     m.id.toLowerCase().includes(query.toLowerCase())
-                  )
+                )
                 : this.state.modelsList;
-            
+
             if (filtered.length === 0) {
                 list.innerHTML = '<div class="actnow-model-empty">No models found</div>';
                 return;
             }
-            
+
             // Helper to format price: up to 3 decimals, remove trailing zeros
             const fmt = (n) => parseFloat(n.toFixed(3));
-            
+
             list.innerHTML = filtered.map(model => {
                 const promptPrice = parseFloat(model.pricing?.prompt || 0) * 1000000;
                 const completionPrice = parseFloat(model.pricing?.completion || 0) * 1000000;
-                
+
                 return `
                 <div class="actnow-model-item ${model.id === this.state.model ? 'selected' : ''}" data-model-id="${model.id}">
                     <div class="actnow-model-row-top">
@@ -1761,7 +1738,7 @@
                     </div>
                 </div>
             `}).join('');
-            
+
             // Add click handlers
             list.querySelectorAll('.actnow-model-item').forEach(item => {
                 item.addEventListener('click', () => {
@@ -1770,21 +1747,21 @@
                 });
             });
         }
-        
+
         selectModel(modelId) {
             const model = this.state.modelsList?.find(m => m.id === modelId);
             if (!model) return;
-            
+
             this.state.model = modelId;
             chrome.storage.sync.set({ model: modelId });
-            
+
             // Update display
             const valueEl = this.shadowRoot.getElementById('actnow-model-value');
             if (valueEl) {
                 valueEl.textContent = model.name;
                 valueEl.title = modelId;
             }
-            
+
             this.closeModelDropdown();
             this.updateSendButtonState();
             console.log('🤖 Model selected:', modelId);
@@ -1793,42 +1770,42 @@
         async loadModelsToDropdown() {
             const list = this.shadowRoot.getElementById('actnow-model-list');
             const valueEl = this.shadowRoot.getElementById('actnow-model-value');
-            
+
             if (!list) {
                 console.error('❌ Model list not found');
                 return;
             }
-            
+
             let activeKey = this.state.apiKey;
             let modelsUrl = 'https://openrouter.ai/api/v1/models';
-            
+
             if (this.state.provider === 'openai') {
                 activeKey = this.state.openaiApiKey;
                 let base = this.state.openaiBaseUrl || 'https://api.openai.com/v1';
                 base = base.replace(/\/$/, '');
                 modelsUrl = `${base}/models`;
             }
-            
+
             if (!activeKey) {
                 list.innerHTML = `<div class="actnow-model-empty">Configure ${this.state.provider === 'openai' ? 'OpenAI' : 'OpenRouter'} API key</div>`;
                 if (valueEl) valueEl.textContent = 'No API key';
                 console.warn('⚠️ No API key configured');
                 return;
             }
-            
+
             list.innerHTML = '<div class="actnow-model-loading">Loading models...</div>';
-            
+
             try {
                 const res = await fetch(modelsUrl, {
                     headers: { Authorization: `Bearer ${activeKey}` }
                 });
-                
+
                 if (!res.ok) {
                     throw new Error('Failed to load models');
                 }
-                
+
                 const data = await res.json();
-                
+
                 if (this.state.provider === 'openai') {
                     // OpenAI Format
                     this.state.modelsList = (data.data || []).map(m => ({
@@ -1839,17 +1816,17 @@
                 } else {
                     // OpenRouter Format
                     this.state.modelsList = data.data
-                        .map(m => ({ 
-                            id: m.id, 
+                        .map(m => ({
+                            id: m.id,
                             name: m.name || m.id,
                             pricing: m.pricing
                         }))
                         .sort((a, b) => a.name.localeCompare(b.name));
                 }
-                
+
                 // Render initial list
                 this.filterModels('');
-                
+
                 // Set current model display
                 if (this.state.model) {
                     const current = this.state.modelsList.find(m => m.id === this.state.model);
@@ -1857,14 +1834,14 @@
                         valueEl.textContent = current.name;
                         valueEl.title = current.id;
                     } else if (valueEl) {
-                         // Keep saved model even if not in list (might be custom or offline)
-                         valueEl.textContent = this.state.model;
+                        // Keep saved model even if not in list (might be custom or offline)
+                        valueEl.textContent = this.state.model;
                     }
                 } else if (this.state.modelsList.length > 0) {
                     // Select first model by default
                     this.selectModel(this.state.modelsList[0].id);
                 }
-                
+
                 console.log(`✅ Loaded ${this.state.modelsList.length} models`);
                 this.updateSendButtonState();
             } catch (e) {
@@ -1877,7 +1854,7 @@
 
         // Utils
         generateId(prefix) { return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
-        
+
         escapeHtml(str) {
             if (!str) return '';
             const div = document.createElement('div');
@@ -1890,7 +1867,7 @@
 
             // Trim whitespace
             let html = text.trim();
-            
+
             // Escape HTML (basic security) - but wait, we need to process md chars first
             // Actually, best practice is escape first, then restore md chars if needed, OR 
             // process md and ensure output is safe. 
@@ -1900,7 +1877,7 @@
             // 1. Code Blocks (```...```)
             // Note: We used escapeHtml so newlines are still \n (not <br>)
             // We need to handle this carefully.
-            
+
             // Replace ```code``` with placeholder to prevent other parsing inside
             const codeBlocks = [];
             html = html.replace(/```(\w+)?\n?([\s\S]*?)```/g, (match, lang, code) => {
@@ -1916,7 +1893,7 @@
 
             // 4. Italic (*...*)
             html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-            
+
             // 5. Headers (### ...)
             html = html.replace(/^###### (.*$)/gm, '<h6>$1</h6>');
             html = html.replace(/^##### (.*$)/gm, '<h5>$1</h5>');
@@ -1934,39 +1911,39 @@
             // Better: use a loop or complex regex. 
             // Let's do a simple pass: replace (<li>.*</li>\n)+ with <ul>...</ul>
             // Since we haven't converted \n to <br> yet, we can match newlines.
-            
+
             // 7. Paragraphs & Newlines
             // Convert double newlines to paragraph breaks or just use <p>
             // We'll replace \n\n with <br><br> for simplicity in chat interface
             // or wrap non-html lines in <p>
-            
+
             // Let's restore code blocks first to avoid messing up formatting
             html = html.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
                 const block = codeBlocks[index];
                 const langClass = block.lang ? `language-${block.lang}` : '';
                 return `<pre class="actnow-code-block"><div class="actnow-code-header"><span>${block.lang || 'Code'}</span></div><code class="${langClass}">${block.code}</code></pre>`;
             });
-            
+
             // Convert newlines to <br> for non-block elements
             // We should not add <br> after block elements (h1-h6, pre, ul, li)
             // This is a bit complex for regex.
-            
+
             // Simplified approach for chat:
             // Just replace \n with <br> EXCEPT when inside or around block tags.
             // But doing it after restoring blocks is hard.
-            
+
             // Let's try to wrap lines.
-            
+
             return html.replace(/\n/g, '<br>');
         }
-        
+
         // Better Markdown Parser (more robust)
         formatMessage(content) {
             // Use the new MarkdownEngine if available
             if (window.ActNowMarkdown) {
                 return window.ActNowMarkdown.parse(content);
             }
-            
+
             // Fallback (should not happen if manifest is correct)
             return this.escapeHtml(content).replace(/\n/g, '<br>');
         }
@@ -1983,60 +1960,60 @@
         }
 
         updateTokenCount(text) {
-             const inputArea = this.shadowRoot.querySelector('.actnow-input-area');
-             if (!inputArea) return;
-             
-             let counter = this.shadowRoot.getElementById('actnow-token-counter');
-             if (!counter) {
-                 counter = document.createElement('div');
-                 counter.id = 'actnow-token-counter';
-                 counter.className = 'actnow-token-counter';
-                 inputArea.appendChild(counter);
-             }
-             
-             // Always show counter, even if text is empty (for testing/verification)
-             counter.style.opacity = '1';
-             
-             let count = 0;
-             if (window.ActNowMarkdown) {
-                 count = window.ActNowMarkdown.estimateTokens(text || '');
-             } else {
-                 count = Math.ceil((text || '').length / 4);
-             }
-             
-             // Add context tokens if selected
-             if (this.state.selectedText) {
-                 const contextTokens = Math.ceil(this.state.selectedText.length / 4);
-                 counter.innerHTML = `
+            const inputArea = this.shadowRoot.querySelector('.actnow-input-area');
+            if (!inputArea) return;
+
+            let counter = this.shadowRoot.getElementById('actnow-token-counter');
+            if (!counter) {
+                counter = document.createElement('div');
+                counter.id = 'actnow-token-counter';
+                counter.className = 'actnow-token-counter';
+                inputArea.appendChild(counter);
+            }
+
+            // Always show counter, even if text is empty (for testing/verification)
+            counter.style.opacity = '1';
+
+            let count = 0;
+            if (window.ActNowMarkdown) {
+                count = window.ActNowMarkdown.estimateTokens(text || '');
+            } else {
+                count = Math.ceil((text || '').length / 4);
+            }
+
+            // Add context tokens if selected
+            if (this.state.selectedText) {
+                const contextTokens = Math.ceil(this.state.selectedText.length / 4);
+                counter.innerHTML = `
                     <span class="actnow-token-icon">🪙</span> 
                     ~${count} + ${contextTokens} (context) tokens
                  `;
-             } else {
-                 counter.innerHTML = `
+            } else {
+                counter.innerHTML = `
                     <span class="actnow-token-icon">🪙</span> 
                     ~${count} tokens
                  `;
-             }
+            }
         }
 
         updateSendButtonState() {
             const input = this.shadowRoot.getElementById('actnow-message-input');
             const btn = this.shadowRoot.getElementById('actnow-send-btn');
             const hint = this.shadowRoot.getElementById('actnow-send-hint');
-            
+
             let hasKey = false;
             if (this.state.provider === 'openai') {
                 hasKey = !!this.state.openaiApiKey;
             } else {
                 hasKey = !!this.state.apiKey;
             }
-            
+
             const missingApi = !hasKey;
             const missingModel = !this.state.model;
             const busy = this.state.isProcessingQueue || this.state.isStreaming;
             // Also disable if input is empty, but only if we have everything else
             // Actually, let's keep the existing logic but just check input for token count
-            
+
             // The original logic didn't check for empty input in disabled state?
             // Let's check the original code again.
             // Original: const disabled = missingApi || missingModel || busy;
@@ -2061,7 +2038,7 @@
                     btn.classList.remove('actnow-btn-loading');
                 }
             }
-            
+
             if (hint) {
                 if (missingApi) {
                     hint.textContent = `Add your ${this.state.provider === 'openai' ? 'OpenAI' : 'OpenRouter'} API key to start.`;
@@ -2073,7 +2050,7 @@
                     hint.style.display = 'none';
                 }
             }
-            
+
             if (input) {
                 this.updateTokenCount(input.value);
             }

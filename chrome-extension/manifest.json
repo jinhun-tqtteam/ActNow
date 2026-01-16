@@ -18,7 +18,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["utils/markdown-engine.js", "content/content.js"],
+      "js": ["utils/constants.js", "utils/encryption.js", "utils/storage-manager.js", "utils/state-manager.js", "utils/api-manager.js", "utils/markdown-engine.js", "content/content.js"],
       "run_at": "document_idle"
     }
   ],
