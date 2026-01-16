@@ -99,9 +99,42 @@
             const container = document.createElement('div');
             container.innerHTML = `
                 <div id="actnow-chat-widget">
-                    <!-- Floating Chat Button - Glassmorphism Circle -->
-                    <div id="actnow-chat-button" class="actnow-chat-button" role="button" aria-expanded="false" aria-controls="actnow-chat-container" tabindex="0">
-                        <div style="font-size: 28px;">⚡</div>
+                    <!-- Floating Dock with Quick Actions -->
+                    <div id="actnow-floating-dock" class="actnow-floating-dock">
+                        <div class="actnow-quick-actions">
+                            <button class="actnow-quick-chip" data-action="translate" title="Translate (Vietnamese)">
+                                <span>Translate</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M5 8l6 6"/>
+                                    <path d="M4 14l6-6 2-3"/>
+                                    <path d="M2 5h12"/>
+                                    <path d="M7 2h1"/>
+                                    <path d="M22 22l-5-10-5 10"/>
+                                    <path d="M14 18h6"/>
+                                </svg>
+                            </button>
+                            <button class="actnow-quick-chip" data-action="summarize" title="Summarize">
+                                <span>Summary</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="21" y1="10" x2="3" y2="10"></line>
+                                    <line x1="21" y1="6" x2="3" y2="6"></line>
+                                    <line x1="21" y1="14" x2="3" y2="14"></line>
+                                    <line x1="21" y1="18" x2="3" y2="18"></line>
+                                </svg>
+                            </button>
+                            <button class="actnow-quick-chip" data-action="research" title="Research">
+                                 <span>Research</span>
+                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Main Floating Button -->
+                        <div id="actnow-chat-button" class="actnow-chat-button" role="button" aria-expanded="false" aria-controls="actnow-chat-container" tabindex="0">
+                            <div style="font-size: 28px;">⚡</div>
+                        </div>
                     </div>
 
                     <!-- Chat Container - Soft Glass Card -->
@@ -256,6 +289,56 @@
             this.setupDOMEvents();
         }
 
+        async handleQuickAction(action) {
+            console.log('⚡ Quick Action triggered:', action);
+
+            // 1. Check selection
+            const hasSelection = this.handleSelection(); // Updates this.state.selectedText and UI
+            if (!hasSelection) {
+                // Shake the selection prompt or show notification?
+                // For now, just open chat regular way, maybe focus?
+                this.toggleChat(true);
+                // Optional: Show toast "Please select text first"
+                return;
+            }
+
+            // 2. Determine prompt
+            let prompt = '';
+            switch (action) {
+                case 'translate':
+                    prompt = 'Translate the following text into Vietnamese:';
+                    break;
+                case 'summarize':
+                    prompt = 'Summarize this text concisely:';
+                    break;
+                case 'research':
+                    prompt = 'Research and explain the key concepts in this text:';
+                    break;
+                default:
+                    prompt = 'Analyze this text:';
+            }
+
+            // 3. Open Chat
+            await this.toggleChat(true);
+
+            // 4. Send Message Immediately
+            const input = this.shadowRoot.getElementById('actnow-message-input');
+            if (input) {
+                input.value = ''; // clear input
+                // processMessage expects just the content. 
+                // However, we want to construct the message with the selected text as context.
+                // But normally the context is attached automatically if selected?
+                // Let's check `processMessage` or `sendMessage`.
+                // `sendMessage` reads input and uses `this.state.selectedText`.
+
+                // So we can just set input to prompt and call sendMessage?
+                // BUT sendMessage takes value from Input.
+
+                input.value = prompt;
+                this.sendMessage();
+            }
+        }
+
         setupDOMEvents() {
             // Helper to get element from Shadow DOM
             const get = (id) => this.shadowRoot.getElementById(id);
@@ -288,6 +371,17 @@
                 e.preventDefault();
                 e.stopPropagation();
                 chrome.runtime.sendMessage({ action: 'openOptionsPage' });
+            });
+
+            // Quick Actions (Chips on Dock)
+            const quickChips = this.shadowRoot.querySelectorAll('.actnow-quick-chip');
+            quickChips.forEach(chip => {
+                chip.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const action = chip.getAttribute('data-action');
+                    this.handleQuickAction(action);
+                });
             });
 
             // Sidebar Events
