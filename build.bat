@@ -1,5 +1,5 @@
 @echo off
-REM ActNow AI Assistant - Build Script for Windows
+REM ActNow AI Assistant - Build / validation script (Windows)
 
 echo.
 echo ========================================
@@ -7,14 +7,12 @@ echo   ActNow Chrome Extension Build
 echo ========================================
 echo.
 
-REM Check if chrome-extension directory exists
-if not exist "chrome-extension\" (
-    echo [ERROR] chrome-extension directory not found!
+REM Run from the repository root (the folder containing manifest.json)
+if not exist "manifest.json" (
+    echo [ERROR] manifest.json not found. Run this script from the repository root.
     pause
     exit /b 1
 )
-
-cd chrome-extension
 
 REM Validate manifest.json
 echo [INFO] Validating manifest.json...
@@ -100,8 +98,6 @@ if not exist "icons\icon48.png" echo [WARN] Missing: icons\icon48.png
 if exist "icons\icon128.png" echo [OK] icons\icon128.png
 if not exist "icons\icon128.png" echo [WARN] Missing: icons\icon128.png
 
-cd ..
-
 echo.
 echo ========================================
 echo   Build completed successfully!
@@ -111,7 +107,7 @@ echo To load the extension:
 echo   1. Open Chrome and go to chrome://extensions/
 echo   2. Enable "Developer mode" (top right toggle)
 echo   3. Click "Load unpacked" button
-echo   4. Select the "chrome-extension" directory
+echo   4. Select the repository root directory (this folder)
 echo.
 echo To reload after changes:
 echo   - Click the reload button on the extension card in chrome://extensions/

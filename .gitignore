@@ -1,1 +1,38 @@
+# --- Editors / IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.*.swp
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+
+# --- Node.js (for build/tooling) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Python (for build/tooling) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# --- Build outputs ---
+dist/
+build/
+*.zip
+*.crx
+*.tgz
+
+# --- Temporary files ---
+*.tmp
+*.temp
+
+# --- Local agent/AI config ---
 /.claude

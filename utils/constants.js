@@ -79,7 +79,7 @@ window.ActNowConstants.DEFAULTS = {
 window.ActNowConstants.API = {
     OPENROUTER_URL: 'https://openrouter.ai/api/v1/chat/completions',
     OPENAI_DEFAULT_URL: 'https://api.openai.com/v1',
-    REFERER: 'https://actnow.ai',
+    REFERER: 'https://github.com/jinhun-tqtteam/ActNow',
     APP_TITLE: 'ActNow AI Assistant'
 };
 

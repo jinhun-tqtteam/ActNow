@@ -79,7 +79,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
                     // Add OpenRouter specific headers only if using OpenRouter
                     if (isOpenRouter) {
-                        headers['HTTP-Referer'] = 'https://actnow.ai';
+                        headers['HTTP-Referer'] = 'https://github.com/jinhun-tqtteam/ActNow';
                         headers['X-Title'] = 'ActNow AI Assistant';
                     }
 
